@@ -1,3 +1,5 @@
+@import './styles/variables.css';
+@import './styles/preferences-controls.css';
 @import './styles/global.css';
 @import './styles/studio.css';
 

@@ -1,6 +1,6 @@
 import { SettingsModal } from './SettingsModal.js';
-import { t, getLang, setLang } from '../lib/i18n.js';
-
+import { PreferencesModal } from './PreferencesModal.js';
+import { t } from '../lib/i18n.js';
 export function Header(navigate) {
     const header = document.createElement('header');
     header.className = 'w-full flex flex-col z-50 sticky top-0';
@@ -66,7 +66,7 @@ export function Header(navigate) {
 
     const settingsBtn = document.createElement('button');
     settingsBtn.className = 'flex items-center gap-2 px-3 py-1.5 rounded-md border border-white/10 bg-white/5 text-[13px] font-bold text-white/80 hover:text-white hover:bg-white/10 hover:border-white/20 transition-colors';
-    settingsBtn.title = 'Settings — API key, local models, preferences';
+    settingsBtn.title = t('settings.titleHint');
     settingsBtn.innerHTML = `
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"/>
@@ -78,15 +78,28 @@ export function Header(navigate) {
         document.body.appendChild(SettingsModal());
     };
 
-    // Language toggle button
-    const langBtn = document.createElement('button');
-    const currentLang = getLang();
-    langBtn.className = 'flex items-center px-3 py-1.5 rounded-md border border-white/10 bg-white/5 text-[13px] font-bold text-white/80 hover:text-white hover:bg-white/10 hover:border-white/20 transition-colors';
-    langBtn.title = currentLang === 'zh' ? 'Switch to English' : '切换为中文';
-    langBtn.textContent = currentLang === 'zh' ? 'EN' : '中文';
-    langBtn.onclick = () => setLang(currentLang === 'zh' ? 'en' : 'zh');
+    const prefsBtn = document.createElement('button');
+    prefsBtn.className = settingsBtn.className;
+    prefsBtn.title = t('preferences.titleHint');
+    prefsBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="4" y1="21" x2="4" y2="14"/>
+            <line x1="4" y1="10" x2="4" y2="3"/>
+            <line x1="12" y1="21" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12" y2="3"/>
+            <line x1="20" y1="21" x2="20" y2="16"/>
+            <line x1="20" y1="12" x2="20" y2="3"/>
+            <line x1="1" y1="14" x2="7" y2="14"/>
+            <line x1="9" y1="8" x2="15" y2="8"/>
+            <line x1="17" y1="16" x2="23" y2="16"/>
+        </svg>
+        <span>${t('nav.preferences')}</span>
+    `;
+    prefsBtn.onclick = () => {
+        document.body.appendChild(PreferencesModal());
+    };
 
-    rightPart.appendChild(langBtn);
+    rightPart.appendChild(prefsBtn);
     rightPart.appendChild(settingsBtn);
 
     navBar.appendChild(leftPart);
@@ -96,3 +109,4 @@ export function Header(navigate) {
 
     return header;
 }
+

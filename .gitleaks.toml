@@ -1,0 +1,14 @@
+title = "Open-Generative-AI-Run"
+
+[extend]
+useDefault = true
+
+[allowlist]
+paths = [
+  '''(?:^|/)node_modules/''',
+  '''(?:^|/)\.next/''',
+  '''(?:^|/)out/''',
+  '''(?:^|/)dist/''',
+  '''(?:^|/)release/''',
+  '''(?:^|/)package-lock\.json''',
+]

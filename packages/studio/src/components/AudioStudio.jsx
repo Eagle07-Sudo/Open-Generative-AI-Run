@@ -1,7 +1,17 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { generateAudio, uploadFile } from "../muapi.js";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { generateAudioForStudio, uploadFileForStudio } from "../studioGenerate.js";
+import { useStudioGenerationCost } from "../cost/useStudioGenerationCost.js";
+import GenerateCostButton from "./GenerateCostButton.jsx";
+import { buildRoutingContext } from "../studioProps.js";
+import { getStudioOpAvailability } from "../studioOpAvailability.js";
+import { resolveProviderForOp, providerDisplayLabel } from "../studioCloud.js";
+import {
+  getUnifiedModelSections,
+  getModelByIdForStudio,
+} from "../modelRegistry.js";
+import { saveModelPick, loadModelPick } from "../modelPickerPersist.js";
 import { audioModels, getAudioModelById } from "../models.js";
 
 // ---------------------------------------------------------------------------
@@ -44,7 +54,7 @@ const VolumeMuteIcon = () => (
   </svg>
 );
 
-const MusicIcon = ({ className = "text-[#22d3ee]" }) => (
+const MusicIcon = ({ className = "text-primary" }) => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
     <path d="M9 18V5l12-2v13" />
     <circle cx="6" cy="18" r="3" />
@@ -64,7 +74,7 @@ const TrashIcon = () => (
 // ---------------------------------------------------------------------------
 // Single File Uploader Component
 // ---------------------------------------------------------------------------
-function AudioFileUploader({ label, value, onChange, apiKey }) {
+function AudioFileUploader({ label, value, onChange, routing, uploadAvail }) {
   const [uploadState, setUploadState] = useState(value ? UPLOAD_STATE.READY : UPLOAD_STATE.IDLE);
   const [progress, setProgress] = useState(0);
   const [fileName, setFileName] = useState(value ? value.split('/').pop().slice(-30) : "");
@@ -90,13 +100,22 @@ function AudioFileUploader({ label, value, onChange, apiKey }) {
       return;
     }
 
+    if (!uploadAvail.canRun) {
+      alert(uploadAvail.message);
+      return;
+    }
+
     setUploadState(UPLOAD_STATE.UPLOADING);
     setProgress(0);
 
     try {
-      const url = await uploadFile(apiKey, file, (pct) => {
-        setProgress(pct);
-      });
+      const url = await uploadFileForStudio(
+        routing,
+        file,
+        (pct) => {
+          setProgress(pct);
+        },
+      );
       setFileName(file.name);
       setUploadState(UPLOAD_STATE.READY);
       onChange(url);
@@ -193,7 +212,7 @@ function AudioFileUploader({ label, value, onChange, apiKey }) {
 // ---------------------------------------------------------------------------
 // Multiple File Uploader Component (for array fields like audios_list)
 // ---------------------------------------------------------------------------
-function AudioListUploader({ label, value = [], onChange, apiKey, maxItems = 2 }) {
+function AudioListUploader({ label, value = [], onChange, routing, uploadAvail, maxItems = 2 }) {
   const handleItemChange = (index, url) => {
     const newItems = [...value];
     if (url) {
@@ -216,7 +235,8 @@ function AudioListUploader({ label, value = [], onChange, apiKey, maxItems = 2 }
             label={`Track #${i + 1}`}
             value={value[i] || null}
             onChange={(url) => handleItemChange(i, url)}
-            apiKey={apiKey}
+            routing={routing}
+            uploadAvail={uploadAvail}
           />
         ))}
       </div>
@@ -377,7 +397,7 @@ function PremiumAudioPlayer({ url, title }) {
           {visualizerHeights.map((h, i) => (
             <div
               key={i}
-              className="w-1.5 rounded-full bg-gradient-to-t from-primary to-[#a855f7] transition-all duration-100"
+              className="w-1.5 rounded-full bg-gradient-to-t from-primary to-accent transition-all duration-100"
               style={{ height: `${h}px` }}
             />
           ))}
@@ -474,34 +494,103 @@ function PremiumAudioPlayer({ url, title }) {
 // ---------------------------------------------------------------------------
 export default function AudioStudio({
   apiKey,
+  muapiKey,
+  runwareApiKey,
+  routingPrefs,
   onGenerationComplete,
   historyItems,
   droppedFiles,
   onFilesHandled,
+  onOpenApiSettings,
 }) {
+  const baseRouting = buildRoutingContext({ apiKey, muapiKey, runwareApiKey, routingPrefs });
+  const uploadAvail = useMemo(
+    () => getStudioOpAvailability("audio", "upload", baseRouting),
+    [
+      baseRouting.routingMode,
+      baseRouting.muapiKey,
+      baseRouting.runwareApiKey,
+      baseRouting.allowMuapiFallback,
+    ],
+  );
+  const defaultResolved = useMemo(
+    () => resolveProviderForOp("audio", "audioT2a", baseRouting),
+    [
+      baseRouting.routingMode,
+      baseRouting.muapiKey,
+      baseRouting.runwareApiKey,
+      baseRouting.allowMuapiFallback,
+    ],
+  );
   const PERSIST_KEY = "hg_audio_studio_persistent";
 
-  // ── Mode & model state ──────────────────────────────────────────────────
+  const [selectedModelProvider, setSelectedModelProvider] = useState(defaultResolved.providerId);
   const [selectedModelId, setSelectedModelId] = useState(audioModels[0]?.id ?? "");
+
+  const modelSections = useMemo(
+    () =>
+      getUnifiedModelSections("audio", {
+        routingMode: baseRouting.routingMode,
+        allowMuapiFallback: baseRouting.allowMuapiFallback,
+        muapiKey: baseRouting.muapiKey,
+        runwareApiKey: baseRouting.runwareApiKey,
+      }),
+    [
+      baseRouting.routingMode,
+      baseRouting.allowMuapiFallback,
+      baseRouting.muapiKey,
+      baseRouting.runwareApiKey,
+    ],
+  );
+
+  const generationRouting = useMemo(
+    () =>
+      buildRoutingContext({
+        apiKey,
+        muapiKey,
+        runwareApiKey,
+        routingPrefs,
+        providerOverride: selectedModelProvider,
+      }),
+    [apiKey, muapiKey, runwareApiKey, routingPrefs, selectedModelProvider],
+  );
   const [params, setParams] = useState({});
   const [openDropdown, setOpenDropdown] = useState(false);
   const modelBtnRef = useRef(null);
 
-  // ── Generation state ──────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Generation state Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState(null);
   const [activeResultUrl, setActiveResultUrl] = useState(null);
   const [activeResultTitle, setActiveResultTitle] = useState("");
   const [view, setView] = useState("input"); // 'input' | 'result'
 
-  // ── History state ────────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ History state Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const [internalHistory, setInternalHistory] = useState([]);
   const history = historyItems ?? internalHistory;
   const [activeHistoryIdx, setActiveHistoryIdx] = useState(0);
 
-  const selectedModel = getAudioModelById(selectedModelId);
+  const selectedModel =
+    getModelByIdForStudio(selectedModelId, "audio", selectedModelProvider) ||
+    getAudioModelById(selectedModelId);
 
-  // ── Initialize params when model changes ──────────────────────────────
+  const audioCostPayload = useMemo(
+    () => ({ model: selectedModelId, ...params }),
+    [selectedModelId, params],
+  );
+
+  const { unitCostUsd, source: costSource, isLoadingCost } = useStudioGenerationCost({
+    studioId: 'audio',
+    op: 'audioT2a',
+    routing: generationRouting,
+    modelId: selectedModelId,
+    providerId: selectedModelProvider,
+    catalogMode: 't2a',
+    payload: audioCostPayload,
+    enabled: Boolean(selectedModelId) && !isGenerating,
+  });
+
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Initialize params when model changes Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   useEffect(() => {
     if (!selectedModel) return;
     const initial = {};
@@ -516,7 +605,7 @@ export default function AudioStudio({
     setParams(initial);
   }, [selectedModelId]); // Only reset when model ID changes
 
-  // ── Persistence: Load ────────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Persistence: Load Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   useEffect(() => {
     try {
       const stored = localStorage.getItem(PERSIST_KEY);
@@ -534,7 +623,7 @@ export default function AudioStudio({
     }
   }, []);
 
-  // ── Persistence: Save ────────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Persistence: Save Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   useEffect(() => {
     const timer = setTimeout(() => {
       try {
@@ -554,7 +643,7 @@ export default function AudioStudio({
     return () => clearTimeout(timer);
   }, [selectedModelId, params, internalHistory, activeResultUrl, activeResultTitle, view]);
 
-  // ── Handle Dropped Files ────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Handle Dropped Files Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   useEffect(() => {
     if (droppedFiles && droppedFiles.length > 0) {
       const audioFiles = droppedFiles.filter(f => f.type.startsWith('audio/'));
@@ -569,15 +658,24 @@ export default function AudioStudio({
 
         if (firstAudioField) {
           const [key] = firstAudioField;
-          // Trigger file upload helper
-          uploadFile(apiKey, audioFiles[0], () => {})
+          if (!uploadAvail.canRun) {
+            alert(uploadAvail.message);
+            onFilesHandled?.();
+            return;
+          }
+          uploadFileForStudio(baseRouting, audioFiles[0], () => {})
             .then(url => {
               setParams(prev => ({ ...prev, [key]: url }));
             })
             .catch(err => alert(`Failed to upload dropped file: ${err.message}`));
         } else if (firstAudioListField) {
           const [key] = firstAudioListField;
-          uploadFile(apiKey, audioFiles[0], () => {})
+          if (!uploadAvail.canRun) {
+            alert(uploadAvail.message);
+            onFilesHandled?.();
+            return;
+          }
+          uploadFileForStudio(baseRouting, audioFiles[0], () => {})
             .then(url => {
               setParams(prev => {
                 const currentList = Array.isArray(prev[key]) ? [...prev[key]] : [];
@@ -592,7 +690,7 @@ export default function AudioStudio({
     }
   }, [droppedFiles, onFilesHandled, selectedModel, apiKey]);
 
-  // ── History helpers ─────────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ History helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const addToInternalHistory = useCallback((entry) => {
     setInternalHistory((prev) => [entry, ...prev].slice(0, 30));
   }, []);
@@ -627,7 +725,7 @@ export default function AudioStudio({
       };
 
       // Call generateAudio
-      const res = await generateAudio(apiKey, audioParams);
+      const res = await generateAudioForStudio(generationRouting, audioParams);
 
       if (!res?.url) {
         throw new Error("No audio URL returned by the API.");
@@ -676,7 +774,7 @@ export default function AudioStudio({
   return (
     <div className="w-full h-full flex bg-app-bg text-white overflow-hidden relative">
       
-      {/* ─── LEFT CONFIGURATION SIDEBAR ─── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ LEFT CONFIGURATION SIDEBAR Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */}
       <div className="w-full lg:w-[400px] border-r border-zinc-900 flex flex-col bg-zinc-950/40 backdrop-blur-lg flex-shrink-0 z-30">
         <div className="p-6 overflow-y-auto flex-1 custom-scrollbar space-y-6 pb-24">
           
@@ -699,25 +797,63 @@ export default function AudioStudio({
 
             {openDropdown && (
               <div className="absolute left-0 right-0 mt-2 z-50 bg-[#161618] border border-zinc-700 rounded shadow-3xl max-h-60 overflow-y-auto custom-scrollbar p-1.5">
-                {audioModels.map((model) => (
-                  <button
-                    key={model.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedModelId(model.id);
-                      setOpenDropdown(false);
-                    }}
-                    className={`w-full text-left px-4 py-2.5 rounded text-xs font-bold transition-all flex flex-col gap-1.5 border ${
-                      model.id === selectedModelId ? "text-primary bg-primary/10 border-primary/20" : "text-zinc-200 border-transparent hover:bg-zinc-900 hover:text-white"
-                    }`}
-                  >
-                    <span>{model.name}</span>
-                    {model.description && (
-                      <span className="text-[10px] text-zinc-300 truncate max-w-[320px] font-normal">
-                        {model.description}
-                      </span>
-                    )}
-                  </button>
+                {modelSections.map((section) => (
+                  <div key={section.providerId} className="mb-2">
+                    <div className="text-[9px] font-bold uppercase tracking-wider text-zinc-500 px-2 py-1">
+                      {section.label}
+                    </div>
+                    {section.models.length === 0 && section.disabledReason ? (
+                      <div className="px-3 py-2 mx-1 mb-1 rounded border border-dashed border-zinc-700">
+                        <p className="text-[10px] text-zinc-400">{section.disabledReason}</p>
+                        {onOpenApiSettings ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onOpenApiSettings();
+                              setOpenDropdown(false);
+                            }}
+                            className="mt-1 text-[10px] font-bold text-primary hover:underline"
+                          >
+                            Open API Settings
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {section.models.map((model) => (
+                      <button
+                        key={`${section.providerId}:${model.id}`}
+                        type="button"
+                        onClick={() => {
+                          setSelectedModelId(model.id);
+                          setSelectedModelProvider(section.providerId);
+                          saveModelPick("audio", {
+                            v: 1,
+                            modelId: model.id,
+                            providerId: section.providerId,
+                          });
+                          setOpenDropdown(false);
+                        }}
+                        className={`w-full text-left px-4 py-2.5 rounded text-xs font-bold transition-all flex flex-col gap-1.5 border ${
+                          model.id === selectedModelId &&
+                          section.providerId === selectedModelProvider
+                            ? "text-primary bg-primary/10 border-primary/20"
+                            : "text-zinc-200 border-transparent hover:bg-zinc-900 hover:text-white"
+                        }`}
+                      >
+                        <span>
+                          {model.name}{" "}
+                          <span className="text-[9px] font-normal text-zinc-500">
+                            ({section.label})
+                          </span>
+                        </span>
+                        {model.description && (
+                          <span className="text-[10px] text-zinc-300 truncate max-w-[320px] font-normal">
+                            {model.description}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
                 ))}
               </div>
             )}
@@ -744,7 +880,8 @@ export default function AudioStudio({
                     label={schema.title || key}
                     value={params[key] || ""}
                     onChange={(url) => setParams(prev => ({ ...prev, [key]: url }))}
-                    apiKey={apiKey}
+                    routing={baseRouting}
+                    uploadAvail={uploadAvail}
                   />
                 );
               }
@@ -756,7 +893,8 @@ export default function AudioStudio({
                     label={schema.title || key}
                     value={params[key] || []}
                     onChange={(urls) => setParams(prev => ({ ...prev, [key]: urls }))}
-                    apiKey={apiKey}
+                    routing={baseRouting}
+                    uploadAvail={uploadAvail}
                     maxItems={schema.maxItems || 2}
                   />
                 );
@@ -908,31 +1046,21 @@ export default function AudioStudio({
 
         </div>
 
-        {/* Dynamic Cost & Generate Section */}
         <div className="p-4 border-t border-zinc-900 bg-zinc-950/80 backdrop-blur-xl absolute bottom-0 left-0 w-full lg:w-[400px] z-40">
-          <button
-            type="button"
+          <GenerateCostButton
             onClick={handleGenerate}
             disabled={isGenerating || !selectedModel}
-            className="w-full py-4 bg-primary text-black text-base font-bold rounded hover:bg-white transition-all transform hover:scale-[1.01] active:scale-95 disabled:opacity-50 disabled:grayscale shadow-glow flex items-center justify-center gap-3"
-          >
-            {isGenerating ? (
-              <>
-                <div className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full animate-spin" />
-                <span>Generating Audio...</span>
-              </>
-            ) : (
-              <>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                  <path d="M5 3l14 9-14 9V3z" />
-                </svg>
-                <span>Generate Track</span>
-              </>
-            )}
-          </button>
+            generating={isGenerating}
+            generateError={generateError}
+            unitCostUsd={unitCostUsd}
+            source={costSource}
+            isLoadingCost={isLoadingCost}
+            primaryLabel="Generate Track"
+            className="w-full py-4 bg-primary text-black text-base font-bold rounded hover:bg-white transition-all transform hover:scale-[1.01] active:scale-95 disabled:opacity-50 disabled:grayscale shadow-glow flex flex-col items-center justify-center gap-0.5"
+          />
         </div>
       </div>
-      {/* ─── RIGHT CONTENT AREA ─── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ RIGHT CONTENT AREA Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */}
       <div className="flex-1 flex flex-col min-w-0 h-full relative z-20">
         
         {/* Main Display panel */}
@@ -1023,7 +1151,7 @@ export default function AudioStudio({
 
           </div>
 
-          {/* ─── BOTTOM HISTORY FOOTER ─── */}
+          {/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ BOTTOM HISTORY FOOTER Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */}
           {history.length > 0 && (
             <div className="border-t border-zinc-900 pt-6 w-full animate-fade-in-up">
               <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider mb-4 px-1">

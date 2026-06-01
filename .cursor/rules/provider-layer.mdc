@@ -1,0 +1,56 @@
+---
+description: Cloud providers — Muapi default, Runware adapter
+globs: packages/studio/**/*.{js,jsx},app/api/**/*,components/**/*.{js,jsx},src/lib/**/*,electron/lib/**/*
+alwaysApply: false
+---
+
+# Cloud provider layer
+
+## Required layout (fork additions)
+
+```
+packages/studio/src/providers/types.js
+packages/studio/src/providers/muapi.js       # wrap/re-export; no Runware here
+packages/studio/src/providers/runware.js
+packages/studio/src/providerFactory.js       # DEFAULT_PROVIDER = 'muapi'
+packages/studio/src/models.runware.js        # optional Runware catalog
+```
+
+New or fork-touched studio code should call `getProvider()` — not import `muapi.js` directly for generation.
+
+## Muapi (upstream default)
+
+- Keep submit → poll pattern in `packages/studio/src/muapi.js`.
+- Do not route Runware through `app/api/api/v1/[[...path]]/route.js` (`api.muapi.ai`).
+
+## Runware (fork)
+
+- API: `https://api.runware.ai/v1`, auth `Authorization: Bearer`.
+- Task-array JSON protocol — isolated in `runware.js` only.
+- Optional proxy: `app/api/runware/**` (separate from Muapi).
+- Model IDs (`runware:…`) only in `models.runware.js` or `providers/runwareModels.js`.
+
+## models.js
+
+On upstream merge, usually take **theirs** for `packages/studio/src/models.js`, then re-merge Runware catalog from our separate file.
+
+## Workflows / Agents
+
+Muapi-only until a Runware adapter exists. If user selects Runware, show a clear UI message — do not fail silently.
+
+## Do not confuse with local inference
+
+- **Cloud:** `muapi` | `runware` (API keys, billing).
+- **Local:** `sdcpp` | `wan2gp` in `src/lib/localModels.js` / `electron/lib/wan2gpProvider.js` — do not mix with cloud provider code.
+
+## Storage keys
+
+- `muapi_key` (existing), `runware_api_key` (fork). Never commit keys; use env for self-host only.
+
+## App entry auth (not in studio package)
+
+- Dual-provider login: `components/cloudSession.js` + `StandaloneShell.js` / `ApiKeyModal.js` — separate from `providerFactory.js` (generation only).
+
+## Logging
+
+- Never log full API keys or `Authorization` Bearer tokens in `providers/runware.js` or API proxies (prefix-only debug at most).

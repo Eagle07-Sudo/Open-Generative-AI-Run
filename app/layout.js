@@ -1,5 +1,6 @@
 import './globals.css';
 import { Inter } from "next/font/google";
+import AppProviders from '@/components/AppProviders';
 
 const inter = Inter({
   variable: "--font-inter",
@@ -13,8 +14,13 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
-      <body className={inter.variable}>{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script src="/preferences-boot.js" />
+      </head>
+      <body className={inter.variable}>
+        <AppProviders>{children}</AppProviders>
+      </body>
     </html>
   );
 }

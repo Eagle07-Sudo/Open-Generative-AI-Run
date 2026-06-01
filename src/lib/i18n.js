@@ -1,11 +1,32 @@
 const LANG_KEY = 'og_lang';
 
+function readLocaleFromPreferences() {
+    try {
+        const raw = localStorage.getItem('og_preferences');
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            const loc = parsed?.general?.locale ?? parsed?.locale;
+            if (loc === 'zh' || loc === 'en') return loc;
+        }
+    } catch { /* ignore */ }
+    return null;
+}
+
 export function getLang() {
-    return localStorage.getItem(LANG_KEY) || 'en';
+    return readLocaleFromPreferences() || localStorage.getItem(LANG_KEY) || 'en';
 }
 
 export function setLang(lang) {
-    localStorage.setItem(LANG_KEY, lang);
+    const locale = lang === 'zh' ? 'zh' : 'en';
+    localStorage.setItem(LANG_KEY, locale);
+    try {
+        const raw = localStorage.getItem('og_preferences');
+        const base = raw ? JSON.parse(raw) : {};
+        if (base.general) base.general.locale = locale;
+        else base.locale = locale;
+        base.preferencesVersion = 2;
+        localStorage.setItem('og_preferences', JSON.stringify(base));
+    } catch { /* ignore */ }
     location.reload();
 }
 
@@ -20,6 +41,7 @@ const translations = {
         'nav.agents': 'Agents',
         'nav.mcpcli': 'MCP & CLI',
         'nav.settings': 'Settings',
+        'nav.preferences': 'Preferences',
 
         // Sidebar
         'sidebar.canvas': 'Canvas',
@@ -43,6 +65,17 @@ const translations = {
         'common.retry': 'Retry',
         'common.loading': 'Loading...',
         'common.noResults': 'No local models match',
+        'mention.uploadFirst': 'Upload media on this card first',
+        'mention.noMatch': 'No matching assets on this card',
+        'mention.placeholder.image': 'Use @image1 to reference uploaded images',
+        'mention.placeholder.video': 'Use @image1, @video1, @audio1 for references on this card',
+        'mention.audioEmpty': 'Upload audio on this card first',
+        'mention.listLabel': 'Mention assets',
+        'video.addRefAudio': 'Add reference audio',
+        'generate.costQuoted': 'Quoted by Muapi',
+        'generate.costEstimated': 'Estimated from Runware catalog (approx.)',
+        'generate.costUnavailable': 'Price unavailable',
+        'generate.lastCharged': 'Last charged',
         'common.regenerate': '↻ Regenerate',
         'common.newItem': '+ New',
         'common.useInGenerator': 'Use in Generator',
@@ -50,12 +83,32 @@ const translations = {
 
         // Settings Modal
         'settings.title': 'Settings',
+        'settings.titleHint': 'Settings — API keys and cloud provider',
+        'preferences.title': 'Preferences',
+        'preferences.titleHint': 'Preferences — theme, language, accessibility',
+        'preferences.themeMode': 'Theme',
+        'preferences.tab.theme': 'Theme',
+        'preferences.tab.general': 'General',
+        'preferences.tab.accessibility': 'Accessibility',
         'settings.apiKey': 'API Key',
         'settings.localModels': 'Local Models',
         'settings.muapiKeyLabel': 'Muapi API Key',
         'settings.keyPlaceholder': 'Enter your Muapi API key...',
         'settings.keyNote': 'Your API key is stored locally and never sent anywhere except api.muapi.ai.',
         'settings.invalidKey': 'Please enter a valid API key.',
+        'settings.tab.account': 'Account',
+        'settings.tab.appearance': 'Appearance',
+        'settings.tab.language': 'Language',
+        'settings.tab.accessibility': 'Accessibility',
+        'settings.preview': 'Live preview',
+        'settings.resetDefaults': 'Reset appearance to defaults',
+        'settings.reducedMotion': 'Reduce motion',
+        'settings.appearance.brand': 'Brand colors',
+        'settings.appearance.backgrounds': 'Backgrounds',
+        'settings.appearance.text': 'Text',
+        'settings.appearance.borders': 'Borders',
+        'settings.appearance.radius': 'Border radius',
+        'settings.appearance.effects': 'Effects',
 
         // Auth Modal
         'auth.title': 'Muapi API Key Required',
@@ -75,6 +128,12 @@ const translations = {
         'image.modelTooltip': 'Select AI generation model',
         'image.arTooltip': 'Change aspect ratio',
         'image.qualityTooltip': 'Set output quality',
+        'image.selectResolution': 'Select resolution',
+        'image.quality.low': 'Low',
+        'image.quality.medium': 'Medium',
+        'image.quality.high': 'High',
+        'batch.sizeLabel': 'Batch size',
+        'video.genAudio': 'Gen audio',
         'image.advancedTooltip': 'Show advanced options',
         'image.toolsTooltip': 'Quick starters & prompt enhancer',
         'image.local': '⚡ Local',
@@ -210,6 +269,7 @@ const translations = {
         'nav.agents': '智能体',
         'nav.mcpcli': 'MCP & CLI',
         'nav.settings': '设置',
+        'nav.preferences': '偏好设置',
 
         // Sidebar
         'sidebar.canvas': '画布',
@@ -233,6 +293,17 @@ const translations = {
         'common.retry': '重试',
         'common.loading': '加载中...',
         'common.noResults': '未找到本地模型',
+        'mention.uploadFirst': '请先在此卡片上传媒体',
+        'mention.noMatch': '此卡片上没有匹配的素材',
+        'mention.placeholder.image': '使用 @image1 引用已上传的图片',
+        'mention.placeholder.video': '使用 @image1、@video1、@audio1 引用此卡片上的素材',
+        'mention.audioEmpty': '请先在此卡片上传音频',
+        'mention.listLabel': '提及素材',
+        'video.addRefAudio': '添加参考音频',
+        'generate.costQuoted': 'Muapi 报价',
+        'generate.costEstimated': 'Runware 目录预估（约）',
+        'generate.costUnavailable': '价格不可用',
+        'generate.lastCharged': '上次扣费',
         'common.regenerate': '↻ 重新生成',
         'common.newItem': '+ 新建',
         'common.useInGenerator': '用于生成器',
@@ -240,12 +311,32 @@ const translations = {
 
         // Settings Modal
         'settings.title': '设置',
+        'settings.titleHint': '设置 — API 密钥与云提供商',
+        'preferences.title': '偏好设置',
+        'preferences.titleHint': '偏好 — 主题、语言、无障碍',
+        'preferences.themeMode': '主题',
+        'preferences.tab.theme': '主题',
+        'preferences.tab.general': '常规',
+        'preferences.tab.accessibility': '无障碍',
         'settings.apiKey': 'API 密钥',
         'settings.localModels': '本地模型',
         'settings.muapiKeyLabel': 'Muapi API 密钥',
         'settings.keyPlaceholder': '输入您的 Muapi API 密钥...',
         'settings.keyNote': '您的 API 密钥仅存储在本地，除 api.muapi.ai 外不会发送到任何地方。',
         'settings.invalidKey': '请输入有效的 API 密钥。',
+        'settings.tab.account': '账户',
+        'settings.tab.appearance': '外观',
+        'settings.tab.language': '语言',
+        'settings.tab.accessibility': '无障碍',
+        'settings.preview': '实时预览',
+        'settings.resetDefaults': '重置外观为默认',
+        'settings.reducedMotion': '减少动画',
+        'settings.appearance.brand': '品牌色',
+        'settings.appearance.backgrounds': '背景',
+        'settings.appearance.text': '文字',
+        'settings.appearance.borders': '边框',
+        'settings.appearance.radius': '圆角',
+        'settings.appearance.effects': '效果',
 
         // Auth Modal
         'auth.title': '需要 Muapi API 密钥',
@@ -265,6 +356,12 @@ const translations = {
         'image.modelTooltip': '选择 AI 生成模型',
         'image.arTooltip': '更改宽高比',
         'image.qualityTooltip': '设置输出质量',
+        'image.selectResolution': '选择分辨率',
+        'image.quality.low': '低',
+        'image.quality.medium': '中',
+        'image.quality.high': '高',
+        'batch.sizeLabel': '批量数量',
+        'video.genAudio': '生成音频',
         'image.advancedTooltip': '显示高级选项',
         'image.toolsTooltip': '快速启动器与提示词增强器',
         'image.local': '⚡ 本地',

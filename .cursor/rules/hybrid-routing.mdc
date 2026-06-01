@@ -1,0 +1,20 @@
+---
+description: Hybrid Muapi/Runware routing — resolver is source of truth
+globs:
+  - packages/studio/**
+  - components/**
+---
+
+# Hybrid routing (fork)
+
+- **Do not** choose provider in `*Studio.jsx` with `cloudProvider === 'runware'`, `isRunware`, or `isMuapi`.
+- Use `getStudioOpAvailability` / `resolveProviderForOp` / `studioGenerate.js` / `useStudioCloud`.
+- On `missing_key`, `ResolveResult.providerId` is the provider that needs a key for that op — never assume it from `routingMode` in `resolveByMode` wrappers.
+- Upload: `uploadFileForStudio` + `capabilities.runware.upload` must stay in sync with `runware.uploadFile` (ADR-005, ADR-006). Muapi is not required for upload when Runware key is set.
+- **Agents / Workflows:** always Muapi — no Runware proxy.
+- Update `capabilities.js` + `tests/fixtures/routing-matrix.json` when adding ops.
+- Runware catalogs live in `models.runware.*.js` — never `models.js` blob.
+- New Runware model: verified AIR from runware.ai/docs + `npm run check:runware-catalog`.
+- Task payloads: `runwareTaskBuilder.js` — see ADR-003 (`docs/adr/ADR-003-runware-catalog.md`).
+- Media studio model lists: use `getUnifiedModelSections` + `UnifiedModelDropdown`; pass `providerOverride` into `buildRoutingContext` on generate.
+- See ADR-002 (`docs/adr/ADR-002-unified-model-picker.md`).

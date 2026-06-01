@@ -1,0 +1,538 @@
+{
+  "openai:gpt-image@2": {
+    "releaseDate": "2026-04-21",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/openai-gpt-image-2",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:recraft@v4.1": {
+    "releaseDate": "2026-03-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/recraft-v4-1",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "openai:gpt-image@1.5": {
+    "releaseDate": "2025-12-15",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/openai-gpt-image-1-5",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:qwen@image-2512": {
+    "releaseDate": "2025-12-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/qwen-image-2512",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:flux@2-klein-9b": {
+    "releaseDate": "2025-11-20",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/flux-2-klein-9b",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:flux@2-klein-9b-base": {
+    "releaseDate": "2025-11-20",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/flux-2-klein-9b-base",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:flux@2-max": {
+    "releaseDate": "2025-11-15",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/flux-2-max",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:flux@2-pro": {
+    "releaseDate": "2025-11-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/flux-2-pro",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:flux@2-flex": {
+    "releaseDate": "2025-11-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/flux-2-flex",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:flux@2-dev": {
+    "releaseDate": "2025-11-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/flux-2-dev",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:uni@1-max": {
+    "releaseDate": "2025-10-15",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/uni-1-max",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:imagineart@1.5-pro": {
+    "releaseDate": "2025-10-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/imagineart-1-5-pro",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:recraft@v4.1-pro": {
+    "releaseDate": "2025-10-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/recraft-v4-1-pro",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:seedream@5-lite": {
+    "releaseDate": "2025-09-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/seedream-5-0-lite",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:nano-banana@2": {
+    "releaseDate": "2025-08-15",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/nano-banana-2",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "google:4@3": {
+    "releaseDate": "2026-02-26",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/google-nano-banana-2",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:kling@image-o3": {
+    "releaseDate": "2025-08-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/kling-image-o3",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:wan@2.7-image": {
+    "releaseDate": "2025-07-15",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/wan2-7-image",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:wan@2.7-image-pro": {
+    "releaseDate": "2025-07-15",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/wan2-7-image-pro",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:kling@image-3": {
+    "releaseDate": "2025-07-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/kling-image-3-0",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:z@image-turbo": {
+    "releaseDate": "2025-06-15",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/z-image-turbo",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:z@image": {
+    "releaseDate": "2025-06-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/z-image",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:uni@1": {
+    "releaseDate": "2025-06-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/uni-1",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:flux@kontext-dev": {
+    "releaseDate": "2025-05-28",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/flux-1-kontext-dev",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:grok@imagine-image": {
+    "releaseDate": "2025-05-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/grok-imagine-image-quality",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:hunyuan@image-3": {
+    "releaseDate": "2025-04-15",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/hunyuanimage-3-0",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:imagineart@1.5": {
+    "releaseDate": "2025-04-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/imagineart-1-5",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:recraft@v4-pro": {
+    "releaseDate": "2025-03-15",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/recraft-v4-pro",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:runway@gen-4-image": {
+    "releaseDate": "2025-03-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/runway-gen-4-image",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:nano-banana@pro": {
+    "releaseDate": "2025-02-15",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/nano-banana-pro",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:seedream@4.5": {
+    "releaseDate": "2025-02-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/seedream-4-5",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:seedance@2.0": {
+    "releaseDate": "2026-02-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/seedance-2-0",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:seedance@2.0-fast": {
+    "releaseDate": "2026-02-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/seedance-2-0-fast",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:kling@video-o3-4k": {
+    "releaseDate": "2025-12-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/kling-video-o3-4k",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:kling@video-3-4k": {
+    "releaseDate": "2025-11-15",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/kling-video-3-0-4k",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:skyreels@v4": {
+    "releaseDate": "2025-11-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/skyreels-v4",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:veo@3.1": {
+    "releaseDate": "2025-10-15",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/veo-3-1",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:veo@3.1-fast": {
+    "releaseDate": "2025-10-15",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/veo-3-1-fast",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:veo@3.1-lite": {
+    "releaseDate": "2025-10-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/veo-3-1-lite",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:kling@video-3-pro": {
+    "releaseDate": "2025-09-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/kling-video-3-0-pro",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:kling@video-o3-pro": {
+    "releaseDate": "2025-09-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/kling-video-o3-pro",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:grok@imagine-video": {
+    "releaseDate": "2025-08-15",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/grok-imagine-video",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:pixverse@v6": {
+    "releaseDate": "2025-08-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/pixverse-v6",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:wan@2.7": {
+    "releaseDate": "2025-07-15",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/wan2-7",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:ltx@2-pro": {
+    "releaseDate": "2025-07-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/ltx-2-pro",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:ltx@2-fast": {
+    "releaseDate": "2025-07-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/ltx-2-fast",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:runway@gen-4.5": {
+    "releaseDate": "2025-06-15",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/runway-gen-4-5",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:vidu@q3": {
+    "releaseDate": "2025-06-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/vidu-q3",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:minimax@hailuo-2.3": {
+    "releaseDate": "2025-05-15",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/minimax-hailuo-2-3",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:aurora@v1": {
+    "releaseDate": "2025-05-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/aurora-v1",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:seedance@1.5-pro": {
+    "releaseDate": "2025-03-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/seedance-1-5-pro",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:happyhorse@1.0": {
+    "releaseDate": "2025-02-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/happyhorse-1-0",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:gemini@3.1-flash-tts": {
+    "releaseDate": "2026-03-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/gemini-3-1-flash-tts",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:inworld@realtime-tts-2": {
+    "releaseDate": "2025-11-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/inworld-realtime-tts-2",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:eleven@v3": {
+    "releaseDate": "2025-10-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/eleven-v3",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:eleven@turbo-v2.5": {
+    "releaseDate": "2025-09-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/eleven-turbo-v2-5",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:minimax@speech-2.8": {
+    "releaseDate": "2025-08-15",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/minimax-speech-2-8",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:minimax@music-2.6": {
+    "releaseDate": "2025-08-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/minimax-music-2-6",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:fish-audio@s2.1-pro": {
+    "releaseDate": "2025-07-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/fish-audio-s2-1-pro",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:qwen3@tts-1.7b-voicedesign": {
+    "releaseDate": "2025-06-15",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/qwen3-tts-1-7b-voicedesign",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:qwen3@tts-1.7b-customvoice": {
+    "releaseDate": "2025-06-15",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/qwen3-tts-1-7b-customvoice",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:qwen3@tts-1.7b-base": {
+    "releaseDate": "2025-06-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/qwen3-tts-1-7b-base",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:ace-step@v1.5-turbo": {
+    "releaseDate": "2025-05-15",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/ace-step-v1-5-turbo",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:ace-step@v1.5-base": {
+    "releaseDate": "2025-05-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/ace-step-v1-5-base",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:inworld@tts-1.5-max": {
+    "releaseDate": "2025-04-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/inworld-tts-1-5-max",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:eleven@music-v1": {
+    "releaseDate": "2025-03-01",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/eleven-music-v1",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  },
+  "runware:xai@tts": {
+    "releaseDate": "2025-02-15",
+    "provenance": {
+      "docUrl": "https://runware.ai/docs/models/xai-text-to-speech",
+      "verifiedAt": "2026-05-24",
+      "source": "runware-docs"
+    }
+  }
+}

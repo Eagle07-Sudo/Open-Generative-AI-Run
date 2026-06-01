@@ -1,0 +1,57 @@
+---
+description: Fork policy — upstream merge, file ownership, Muapi default
+alwaysApply: true
+---
+
+# Open Generative AI — Fork maintenance
+
+**Upstream:** https://github.com/Anil-matcha/Open-Generative-AI (branch `main`)
+**This fork:** Runware + UI tweaks. **Default cloud provider:** Muapi (never remove).
+
+## Before every change
+
+1. Is this **fork-only**? Put it in dedicated paths (see ownership table), not scattered edits.
+2. Does it touch **high-churn upstream files** (`models.js`, `muapi.js`, `*Studio.jsx`)? Minimize diff; use abstractions.
+3. Can you **add** without deleting Muapi behavior? Prefer additive changes.
+
+## Merge conflict ownership
+
+| Prefer **ours** (fork) | Prefer **theirs** (upstream) |
+|------------------------|------------------------------|
+| `packages/studio/src/providers/**` | `packages/studio/src/models.js` (unless Runware lives in `models.runware.js`) |
+| `packages/studio/src/providerFactory.js` | `packages/studio/src/muapi.js` if unchanged by design |
+| `.cursor/rules/**`, `FORK.md` | New upstream studio features — merge then re-wire provider |
+| `app/api/runware/**` (when added) | Submodule pointers as upstream ships them |
+| Fork UI/i18n under `src/lib/i18n.js`, `src/styles/**` | `app/api/api/v1/**` Muapi proxy |
+
+Resolve **per file**. Sometimes choose upstream over fork — that is OK; document in `FORK.md`.
+
+## Forbidden
+
+- Removing or disabling Muapi as the default cloud path.
+- Embedding Runware logic inside `muapi.js` or the Muapi proxy routes.
+- Adding Runware models inside the main `models.js` blob.
+- Committing API keys, `.env`, or secrets.
+- Agent commit/push **without** `npm run security:secrets` (before commit) or `npm run security:secrets:git` (before push).
+- `git add -f` on `.env` or secret-bearing files.
+- Drive-by formatting or refactors in untouched files.
+
+## After merging upstream
+
+1. `git submodule update --init --recursive`
+2. `npm run setup` if workspaces or lockfile changed
+3. Smoke test: Muapi image gen; Runware if implemented
+4. Update `FORK.md` **Upstream baseline** (SHA, date, merge notes) and **rewrite Differences from upstream** if capabilities changed; update **Merge decisions** table as needed
+5. If `README.md` conflicted: re-apply the **This fork** comparison table (after the Gemini Omni quote, before `### Related projects`); sync from FORK **Differences**; do not rewrite upstream body below
+
+## Diff discipline
+
+Smallest correct diff. One concern per commit when possible.
+
+## Git operations
+
+Follow [`.cursor/rules/git-secrets-and-push.mdc`](git-secrets-and-push.mdc). The user delegates commit/push to the agent.
+
+- **Conventional Commits** for subjects; update [`FORK.md`](../../FORK.md) **Differences from upstream** and README **This fork** table only when user-visible behavior changes.
+- Run gitleaks before commit and push (`security:secrets` / `security:secrets:git`).
+- History: `git log`. Optional `CHANGELOG.md` only when tagging a release (`v*`).

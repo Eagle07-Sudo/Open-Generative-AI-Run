@@ -8,6 +8,38 @@
 
 > 🤖 **Automate media generations with AI coding agents:** [Generative-Media-Skills](https://github.com/SamurAIGPT/Generative-Media-Skills) — a library of skills that let agents like **Claude Code**, **Codex**, and other coding assistants drive 200+ image/video models end-to-end (prompt → generate → edit → stitch) directly from your terminal. Perfect for building automated media pipelines without touching a UI.
 
+## This fork (Open-Generative-AI-Run)
+
+> **Upstream:** [Anil-matcha/Open-Generative-AI](https://github.com/Anil-matcha/Open-Generative-AI) · **This repo:** [Eagle07-Sudo/Open-Generative-AI-Run](https://github.com/Eagle07-Sudo/Open-Generative-AI-Run)
+
+> **Personal fork — not a supported product.** This repository is maintained for the owner's own use and shared under the project license for reference. It is not offered as a service, roadmap, or support channel. There is no commitment to fix issues on other machines, accept feature requests, or track every upstream release. For the upstream app and community support, see [Anil-matcha/Open-Generative-AI](https://github.com/Anil-matcha/Open-Generative-AI). You are welcome to fork and adapt this code for your own needs.
+
+Compared to upstream **today**:
+
+| Capability | Upstream | This fork |
+|------------|----------|-----------|
+| Cloud providers | Muapi | Muapi + optional **Runware** (image, video, audio — t2i/i2i/t2v/i2v/v2v) |
+| First launch | Muapi key | Muapi **or** Runware key |
+| Agents / Workflows | Muapi | Muapi only (unchanged) |
+| Media routing | Muapi | Runware-first / Muapi-only / Runware-only (API Settings) |
+| Model picker (Image / Video / Audio) | Muapi models | One list: Runware + Muapi; model choice sets the provider |
+| Runware catalog | N/A | 100+ SOTA models (2025+); i2i/i2v/v2v parity; release date badge in picker |
+| API keys UI | Settings modal | Same card as Get Started; remove key without replacement |
+| Theme | Upstream defaults | Preferences: System / Light / Dark + token customize |
+| Media upload / preview | Upload to CDN on pick | Local blob preview; cloud upload on **Generate**; card-scoped `@image1` / `@audio1`; Runware I2I uses `inputs.referenceImages` + tier resolution (ADR-011) |
+| Model controls (AR, duration, quality) | Per Muapi catalog in studio | Catalog resolver (ADR-008/010): Seedance Auto + 7 AR, 4–15s slider, 480p/720p, Audio On/Off; GPT Image 2 quality + 1K/2K/4K; batch stepper; tier UI when resolver has 1k/2k/4k |
+| Gallery / Recreate | Success-only history | Pending cards on submit; **Recreate** restores settings + refs (ADR-012) |
+| Seed (reproducibility) | Not in React studios | **Seed** chip when catalog supports it; Recreate + batch seeds; auto **+1** after generate (ADR-012) |
+| Gallery detail / Recreate refs | Metadata on every card | Thumbnail grid; **detail panel**; IDB + manifest Recreate; per-card batch seed; **Retry** on failed cards (ADR-012) |
+
+- Studio API warnings appear only when the **required** provider key for that studio is missing.
+- Details: [FORK.md — Differences from upstream](FORK.md#differences-from-upstream). Security: [SECURITY.md](SECURITY.md). Scope: [SUPPORT.md](SUPPORT.md).
+
+### Latest fork changes
+
+- **Runware ↔ Muapi parity (ADR-005):** i2i, i2v, and v2v Runware catalogs; unified picker on Image i2i and Video i2v/v2v; `npm run check:full-parity`.
+- **Catalog freshness (ADR-004):** release date badges in the model picker; 2025+ filter; provenance manifest for Runware models.
+
 ### Related projects
 
 > **Open-source Node based workflow builder** -> https://github.com/SamurAIGPT/Vibe-Workflow
@@ -309,8 +341,8 @@ The Video Studio follows the same pattern:
 
 | Model | Type | Key Features |
 | :--- | :--- | :--- |
-| **Seedance 2.0** | Text-to-Video | ByteDance · Aspect ratios 16:9 / 9:16 / 4:3 / 3:4 · Duration 5 / 10 / 15s · Quality basic/high |
-| **Seedance 2.0 I2V** | Image-to-Video | ByteDance · Animate images into video · Up to 9 reference images · Aspect ratios 16:9 / 9:16 / 4:3 / 3:4 · Duration 5 / 10 / 15s · Quality basic/high |
+| **Seedance 2.0** | Text-to-Video | ByteDance · Aspect **Auto** + 16:9 / 9:16 / 4:3 / 3:4 / 1:1 / 21:9 · Duration **4–15s** (slider) · **480p / 720p** · Audio On/Off |
+| **Seedance 2.0 I2V** | Image-to-Video | ByteDance · Same controls as T2V Seedance · **480p / 720p** · Audio On/Off |
 | **Seedance 2.0 Extend** | Video Extension | ByteDance · Seamlessly continue any Seedance 2.0 generation · Preserves style, motion & audio · Optional continuation prompt · Duration 5 / 10 / 15s · Quality basic/high |
 | **Grok Imagine T2V** | Text-to-Video | xAI · Duration 6 / 10 / **15s** · Modes: fun / normal / spicy · Aspect ratios 9:16 / 16:9 / 2:3 / 3:2 / 1:1 |
 | **Grok Imagine I2V** | Image-to-Video | xAI · Duration 6 / 10 / **15s** · Modes: fun / normal / spicy · Cinematic motion from still images |

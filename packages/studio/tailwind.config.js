@@ -4,12 +4,20 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        'app-bg': '#050505',
-        'panel-bg': '#0a0a0a',
-        'card-bg': '#111111',
-        primary: '#22d3ee',
-        secondary: '#a1a1aa',
-        muted: '#52525b',
+        'app-bg': 'var(--bg-app)',
+        'panel-bg': 'var(--bg-panel)',
+        'card-bg': 'var(--bg-card)',
+        primary: {
+          DEFAULT: 'var(--color-primary)',
+          hover: 'var(--color-primary-hover)',
+        },
+        accent: {
+          DEFAULT: 'var(--color-accent)',
+          hover: 'var(--color-accent-hover)',
+        },
+        danger: 'var(--color-danger)',
+        secondary: 'var(--text-secondary)',
+        muted: 'var(--text-muted)',
       },
     },
   },

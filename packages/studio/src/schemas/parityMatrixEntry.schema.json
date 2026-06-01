@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-generative-ai.run/schemas/parityMatrixEntry.json",
+  "title": "ParityMatrixEntry",
+  "type": "object",
+  "required": ["id", "studio", "mode", "muapiId", "parityClass"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "studio": { "type": "string", "enum": ["image", "video", "audio", "cinema", "lipsync", "clipping", "marketing", "vibe-motion", "workflows", "agents", "design-agent", "apps"] },
+    "mode": { "type": "string", "enum": ["t2i", "i2i", "t2v", "i2v", "v2v", "t2a", "op"] },
+    "muapiId": { "type": "string" },
+    "runwareCatalogId": { "type": ["string", "null"] },
+    "runwareAir": { "type": ["string", "null"] },
+    "parityClass": { "type": "string", "enum": ["A", "B", "C", "TBD"] },
+    "taskType": { "type": ["string", "null"] },
+    "taskProfile": { "type": ["string", "null"] },
+    "pickerSurface": { "type": "string", "enum": ["unified", "legacy", "none"] },
+    "adapterOp": { "type": ["string", "null"] },
+    "docUrl": { "type": ["string", "null"] },
+    "verifiedLive": { "type": "boolean" },
+    "verifiedAt": { "type": ["string", "null"] },
+    "exemptionReason": { "type": ["string", "null"] }
+  }
+}

@@ -1,7 +1,33 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { uploadFile, generateMarketingStudioAd } from "../muapi.js";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import {
+  stageFileForStudio,
+  generateMarketingStudioAdForStudio,
+} from "../studioGenerate.js";
+import { getStudioAsset } from "../media/studioAssetRegistry.js";
+import { isAssetLabel, resolvePreviewSrc } from "../media/previewSrc.js";
+import MediaPreviewThumb from "./media/MediaPreviewThumb.jsx";
+import MentionPromptField from "./media/MentionPromptField.jsx";
+import {
+  cardMentionAssets,
+  extractCardLabels,
+  stripMentionsFromPrompt,
+} from "../media/cardMentionAssets.js";
+import { useStudioGenerationCost } from "../cost/useStudioGenerationCost.js";
+import GenerateCostButton from "./GenerateCostButton.jsx";
+import GenerationHistoryCard from "./GenerationHistoryCard.jsx";
+import GenerationDetailViewer from "./GenerationDetailViewer.jsx";
+import {
+  assetsToManifest,
+  manifestFromAssetLabels,
+  restoreAssetsForRecreate,
+} from "../media/studioAssetPersist.js";
+import { useOptimisticGenerationHistory } from "../hooks/useOptimisticGenerationHistory.js";
+import { buildGenerationSnapshot, subscribeStudioRecreate } from "../studioRecreate.js";
+import { CONTROL_STRINGS } from "../lib/controlStrings.js";
+import { buildRoutingContext } from "../studioProps.js";
+import { getStudioOpAvailability } from "../studioOpAvailability.js";
 
 const SCROLLBAR_STYLE = `
   .custom-scrollbar-thin::-webkit-scrollbar {
@@ -19,10 +45,10 @@ const SCROLLBAR_STYLE = `
   }
 `;
 
-// ── Icons ────────────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Icons Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 const CheckSvg = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" strokeWidth="4">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4">
     <polyline points="20 6 9 17 4 12" />
   </svg>
 );
@@ -64,7 +90,7 @@ const RefIcon = () => (
   </svg>
 );
 
-// ── Assets ───────────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Assets Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 const ASSETS = {
   avatar: [
@@ -93,7 +119,12 @@ const OPTIONS = {
   duration: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 };
 
-// ── Components ───────────────────────────────────────────────────────────────
+/** @param {string | null} ref label (image1) or https URL */
+function previewUrlForRef(ref) {
+  return resolvePreviewSrc("marketing", null, ref, getStudioAsset);
+}
+
+// Ã¢â€â‚¬Ã¢â€â‚¬ Components Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 function UploadSlot({ icon, url, progress, label, onUpload, onClear, multiple = false, images = [] }) {
   const inputRef = useRef(null);
@@ -122,7 +153,18 @@ function UploadSlot({ icon, url, progress, label, onUpload, onClear, multiple = 
           </div>
         ) : url ? (
           <div className="w-full h-full rounded-full overflow-hidden border border-black/20">
-            <img src={url} className="w-full h-full object-cover" alt={label} />
+            <MediaPreviewThumb
+              studioId="marketing"
+              url={typeof url === "string" && isAssetLabel(url) ? url : url}
+              asset={
+                typeof url === "string" && isAssetLabel(url)
+                  ? getStudioAsset("marketing", url)
+                  : undefined
+              }
+              kind="image"
+              className="w-full h-full"
+              alt={label}
+            />
           </div>
         ) : (
           <div className="text-white/40 group-hover:text-primary transition-colors">
@@ -229,9 +271,26 @@ function SimpleDropdown({ isOpen, title, options, selected, onSelect, onClose })
   );
 }
 
-// ── Main Component ───────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Main Component Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
-export default function MarketingStudio({ apiKey, droppedFiles, onFilesHandled }) {
+export default function MarketingStudio({
+  apiKey,
+  muapiKey,
+  runwareApiKey,
+  routingPrefs,
+  droppedFiles,
+  onFilesHandled,
+}) {
+  const routing = buildRoutingContext({ apiKey, muapiKey, runwareApiKey, routingPrefs });
+  const uploadAvail = useMemo(
+    () => getStudioOpAvailability("marketing", "upload", routing),
+    [
+      routing.routingMode,
+      routing.muapiKey,
+      routing.runwareApiKey,
+      routing.allowMuapiFallback,
+    ],
+  );
   const PERSIST_KEY = "hg_marketing_studio_persistent";
   
   const [prompt, setPrompt] = useState("");
@@ -247,15 +306,51 @@ export default function MarketingStudio({ apiKey, droppedFiles, onFilesHandled }
     duration: 5
   });
 
-  const [history, setHistory] = useState([]);
+  const {
+    history,
+    setHistory,
+    prependPending,
+    resolvePending,
+    failPending,
+  } = useOptimisticGenerationHistory([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [recreateRefWarning, setRecreateRefWarning] = useState(null);
   const [dropdown, setDropdown] = useState(null); // 'format' | 'avatar' | 'ratio' | 'res' | 'duration'
   const [uploadProgress, setUploadProgress] = useState({ product: 0, avatar: 0, additional: 0 });
-  const [fullscreenUrl, setFullscreenUrl] = useState(null);
+  const [detailEntry, setDetailEntry] = useState(/** @type {object | null} */ (null));
 
-  const textareaRef = useRef(null);
+  const cardRefs = useMemo(
+    () => [productImage, avatarImage, ...additionalImages].filter(Boolean),
+    [productImage, avatarImage, additionalImages],
+  );
 
-  // ── Persistence ───────────────────────────────────────────────────────────
+  const mentionAssets = useMemo(
+    () => cardMentionAssets("marketing", cardRefs),
+    [cardRefs, productImage, avatarImage, additionalImages],
+  );
+
+  const cardLabels = useMemo(() => extractCardLabels(cardRefs), [cardRefs]);
+
+  const marketingCostPayload = useMemo(
+    () => ({
+      prompt,
+      aspect_ratio: params.ratio,
+      duration: params.duration,
+      resolution: params.res,
+      images_list: cardLabels,
+    }),
+    [prompt, params.ratio, params.duration, params.res, cardLabels],
+  );
+
+  const { unitCostUsd, source: costSource, isLoadingCost } = useStudioGenerationCost({
+    studioId: 'marketing',
+    op: 'marketingAd',
+    routing,
+    modelId: 'marketing-ad',
+    providerId: 'muapi',
+    payload: marketingCostPayload,
+    enabled: Boolean(productImage) && !isGenerating,
+  });
 
   useEffect(() => {
     try {
@@ -267,20 +362,99 @@ export default function MarketingStudio({ apiKey, droppedFiles, onFilesHandled }
         if (data.productImage) setProductImage(data.productImage);
         if (data.avatarImage) setAvatarImage(data.avatarImage);
         if (data.additionalImages) setAdditionalImages(data.additionalImages);
-        if (data.history) setHistory(data.history);
+        // Ref restore on Recreate only — not on load (avoids IDB freeze on startup).
+        if (data.history) {
+          setHistory(
+            data.history.map((e) => ({
+              status: e.status || (e.url ? "ready" : "pending"),
+              ...e,
+            })),
+          );
+        }
       }
     } catch (err) { console.warn("Load failed", err); }
   }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      const state = { prompt, params, productImage, avatarImage, additionalImages, history };
+      const state = {
+        prompt,
+        params,
+        productImage,
+        avatarImage,
+        additionalImages,
+        history: history.filter((e) => e.status === "ready" && e.url),
+      };
       localStorage.setItem(PERSIST_KEY, JSON.stringify(state));
     }, 500);
     return () => clearTimeout(timer);
   }, [prompt, params, productImage, avatarImage, additionalImages, history]);
 
-  // ── Handlers ───────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const imageLabels = [productImage, avatarImage, ...additionalImages].filter(Boolean);
+    if (!imageLabels.length) return undefined;
+    const timer = setTimeout(() => {
+      try {
+        const stored = localStorage.getItem(PERSIST_KEY);
+        const prev = stored ? JSON.parse(stored) : {};
+        const assetManifest = assetsToManifest(
+          imageLabels.map((l) => getStudioAsset("marketing", l)).filter(Boolean),
+        );
+        localStorage.setItem(
+          PERSIST_KEY,
+          JSON.stringify({ ...prev, assetManifest }),
+        );
+      } catch {
+        /* ignore */
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [productImage, avatarImage, additionalImages]);
+
+  useEffect(() => {
+    return subscribeStudioRecreate((snap) => {
+      if (snap.studioId !== "marketing") return;
+      setRecreateRefWarning(null);
+      setPrompt(snap.prompt || "");
+      if (snap.format) {
+        const ugc = ASSETS.ugc.find((u) => u.name === snap.format);
+        if (ugc) {
+          setParams((p) => ({
+            ...p,
+            format: ugc.name,
+            videoUrl: ugc.url,
+            ratio: snap.controls?.aspect_ratio || p.ratio,
+            res: snap.controls?.resolution || p.res,
+            duration: snap.controls?.duration ?? p.duration,
+          }));
+        }
+      }
+      if (snap.controls?.aspect_ratio) {
+        setParams((p) => ({ ...p, ratio: String(snap.controls.aspect_ratio) }));
+      }
+      if (snap.controls?.resolution) {
+        setParams((p) => ({ ...p, res: String(snap.controls.resolution) }));
+      }
+      if (snap.controls?.duration != null) {
+        setParams((p) => ({ ...p, duration: Number(snap.controls.duration) }));
+      }
+      void restoreAssetsForRecreate("marketing", snap).then(({ restored, missing }) => {
+        const product = restored.find((l) => l === "image1");
+        const avatar = restored.find((l) => l === "image2");
+        const extra = restored.filter(
+          (l) => l.startsWith("image") && l !== "image1" && l !== "image2",
+        );
+        if (product) setProductImage(product);
+        if (avatar) setAvatarImage(avatar);
+        setAdditionalImages(extra.slice(0, 6));
+        if (missing.length > 0) {
+          setRecreateRefWarning(CONTROL_STRINGS.refsMissingRecreate);
+        }
+      });
+    });
+  }, []);
+
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Handlers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
   const downloadFile = async (url, filename) => {
     try {
@@ -302,54 +476,98 @@ export default function MarketingStudio({ apiKey, droppedFiles, onFilesHandled }
   const handleUpload = async (e, target) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
-    
+    if (!uploadAvail.canRun) {
+      alert(uploadAvail.message);
+      return;
+    }
+
     if (target === 'additional') {
       const remaining = 6 - additionalImages.length;
       const toUpload = files.slice(0, remaining);
       for (const file of toUpload) {
         try {
-          const url = await uploadFile(apiKey, file, (pct) => setUploadProgress(p => ({ ...p, additional: pct })));
-          setAdditionalImages(prev => [...prev, url].slice(0, 6));
-        } catch (err) { alert(err.message); }
+          setUploadProgress((p) => ({ ...p, additional: 50 }));
+          const asset = await stageFileForStudio("marketing", file);
+          setUploadProgress((p) => ({ ...p, additional: 100 }));
+          setAdditionalImages((prev) => [...prev, asset.label].slice(0, 6));
+        } catch (err) {
+          alert(err.message);
+        }
       }
     } else {
       const file = files[0];
+      const slotLabel = target === "product" ? "image1" : "image2";
       try {
-        const url = await uploadFile(apiKey, file, (pct) => setUploadProgress(p => ({ ...p, [target]: pct })));
-        if (target === 'product') setProductImage(url);
-        else setAvatarImage(url);
-      } catch (err) { alert(err.message); }
+        setUploadProgress((p) => ({ ...p, [target]: 50 }));
+        const asset = await stageFileForStudio("marketing", file, { label: slotLabel });
+        setUploadProgress((p) => ({ ...p, [target]: 100 }));
+        if (target === "product") setProductImage(asset.label);
+        else setAvatarImage(asset.label);
+      } catch (err) {
+        alert(err.message);
+      }
     }
     setUploadProgress(p => ({ ...p, [target]: 0 }));
   };
 
   const handleGenerate = async () => {
-    if (!prompt.trim()) return alert("Please enter an ad script.");
+    const apiPrompt = stripMentionsFromPrompt(prompt.trim());
+    if (!apiPrompt) return alert("Please enter an ad script.");
     if (!productImage) return alert("Please upload a product image.");
 
     setIsGenerating(true);
-    try {
-      const result = await generateMarketingStudioAd(apiKey, {
-        prompt,
+    const imageLabels = [productImage, avatarImage, ...additionalImages].filter(Boolean);
+    const snapshot = buildGenerationSnapshot({
+      studioId: "marketing",
+      catalogMode: "t2v",
+      modelId: "marketing-ad",
+      providerId: "muapi",
+      prompt: prompt.trim(),
+      controls: {
         aspect_ratio: params.ratio,
         duration: params.duration,
         resolution: params.res,
-        images_list: [productImage, avatarImage, ...additionalImages].filter(Boolean),
-        video_files: params.videoUrl ? [params.videoUrl] : []
-      });
+      },
+      assetLabels: cardLabels,
+      assetManifest: manifestFromAssetLabels("marketing", imageLabels),
+      format: params.format,
+    });
+    const pendingId = prependPending({
+      prompt,
+      format: params.format,
+      snapshot,
+      mediaType: "marketing",
+    });
+    try {
+      const result = await generateMarketingStudioAdForStudio(routing, {
+        prompt: apiPrompt,
+        aspect_ratio: params.ratio,
+        duration: params.duration,
+        resolution: params.res,
+        images_list: imageLabels,
+        video_files: params.videoUrl ? [params.videoUrl] : [],
+      }, { imageLabels, cardLabels });
 
       if (result?.url) {
-        const entry = {
-          id: Date.now(),
+        const finalizedManifest = manifestFromAssetLabels("marketing", imageLabels);
+        resolvePending(pendingId, {
+          id: String(Date.now()),
           url: result.url,
           prompt,
           format: params.format,
-          timestamp: new Date().toISOString()
-        };
-        setHistory(prev => [entry, ...prev]);
-        setFullscreenUrl(result.url);
+          providerId: "muapi",
+          timestamp: new Date().toISOString(),
+          snapshot: {
+            ...snapshot,
+            assetManifest: finalizedManifest,
+            assetLabels: cardLabels,
+          },
+        });
+      } else {
+        failPending(pendingId, "No video URL returned");
       }
     } catch (err) {
+      failPending(pendingId, err.message);
       alert("Generation failed: " + err.message);
     } finally {
       setIsGenerating(false);
@@ -362,48 +580,29 @@ export default function MarketingStudio({ apiKey, droppedFiles, onFilesHandled }
     el.style.height = Math.min(el.scrollHeight, 250) + "px";
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Render Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
   return (
     <div className="w-full h-full flex flex-col items-center justify-center bg-app-bg relative p-4 md:p-6 overflow-hidden">
       <style>{SCROLLBAR_STYLE}</style>
       
-      {/* ── MAIN CONTENT AREA ── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ MAIN CONTENT AREA Ã¢â€â‚¬Ã¢â€â‚¬ */}
       <div className="flex-1 overflow-y-auto custom-scrollbar p-6 pb-40">
         {history.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in-up">
-            {history.map(entry => (
-              <div key={entry.id} className="relative group rounded-lg overflow-hidden border border-white/10 bg-[#0a0a0a] shadow-xl hover:border-primary/50 transition-all duration-300 flex flex-col">
-                <video 
-                  src={entry.url} 
-                  className="w-full aspect-video object-cover cursor-pointer hover:opacity-80 transition-opacity" 
-                  onClick={() => setFullscreenUrl(entry.url)}
-                  muted loop onMouseOver={e => e.target.play()} onMouseOut={e => { e.target.pause(); e.target.currentTime = 0; }}
-                />
-                
-                {/* Actions Overlay */}
-                <div className="absolute top-2 right-2 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                   <button
-                    onClick={(e) => { e.stopPropagation(); downloadFile(entry.url, `marketing-ad-${entry.id}.mp4`); }}
-                    className="p-2 bg-black/60 backdrop-blur-md rounded-full text-white hover:bg-primary hover:text-black transition-all border border-white/10"
-                    title="Download"
-                   >
-                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                       <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
-                     </svg>
-                   </button>
-                </div>
-
-                <div className="p-3 bg-black/80 backdrop-blur-sm border-t border-white/5 flex flex-col gap-1.5 flex-1">
-                  <p className="text-white/60 text-[10px] line-clamp-2 leading-relaxed font-medium">{entry.prompt}</p>
-                  <div className="flex items-center justify-between mt-auto">
-                    <span className="text-[9px] font-black text-primary px-2 py-0.5 bg-primary/10 rounded border border-primary/20 uppercase tracking-tighter">
-                      {entry.format}
-                    </span>
-                    <span className="text-[9px] text-white/30 font-bold">{new Date(entry.timestamp).toLocaleDateString()}</span>
-                  </div>
-                </div>
-              </div>
+            {history.map((entry, idx) => (
+              <GenerationHistoryCard
+                key={entry.id || idx}
+                entry={{
+                  status: entry.status || (entry.url ? "ready" : "pending"),
+                  ...entry,
+                }}
+                mediaType="marketing"
+                onOpen={(e) => setDetailEntry(e)}
+                onDownload={(e) =>
+                  e.url && downloadFile(e.url, `marketing-ad-${e.id || idx}.mp4`)
+                }
+              />
             ))}
           </div>
         ) : (
@@ -412,7 +611,7 @@ export default function MarketingStudio({ apiKey, droppedFiles, onFilesHandled }
                 <div className="absolute inset-0 bg-primary/10 blur-[120px] rounded-full opacity-30 group-hover:opacity-60 transition-opacity duration-1000" />
                 <div className="relative w-24 h-24 md:w-32 md:h-32 bg-white/[0.02] rounded-[2rem] flex items-center justify-center border border-white/[0.05] overflow-hidden backdrop-blur-sm">
                   <div className="w-16 h-16 bg-primary/5 rounded-2xl flex items-center justify-center border border-primary/10 relative z-10 transition-transform duration-500 group-hover:scale-110 shadow-inner">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" strokeWidth="1.5">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                       <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
                       <line x1="8" y1="21" x2="16" y2="21" />
                       <line x1="12" y1="17" x2="12" y2="21" />
@@ -432,7 +631,7 @@ export default function MarketingStudio({ apiKey, droppedFiles, onFilesHandled }
         )}
       </div>
 
-      {/* ── BOTTOM PROMPT BAR ── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ BOTTOM PROMPT BAR Ã¢â€â‚¬Ã¢â€â‚¬ */}
       <div style={{ animationDelay: "0.2s" }} className="absolute bottom-4 w-full max-w-[95%] lg:max-w-4xl z-40 animate-fade-in-up">
         <div className="bg-[#0a0a0a]/80 backdrop-blur-3xl rounded-lg border border-white/10 p-4 flex flex-col gap-2 shadow-4xl">
           {additionalImages.length > 0 && (
@@ -452,15 +651,20 @@ export default function MarketingStudio({ apiKey, droppedFiles, onFilesHandled }
           )}
           {/* Top Row: Full-width Textarea */}
           <div className="w-full relative">
-            <textarea
-              ref={textareaRef}
+            <MentionPromptField
               value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onInput={handleTextareaInput}
+              onChange={setPrompt}
+              assets={mentionAssets}
               placeholder="Describe your ad script... Use @image1 for product, @image2 for avatar."
               rows={1}
               className="w-full bg-transparent border-none text-white text-sm placeholder:text-white/20 focus:outline-none resize-none pt-1 leading-relaxed min-h-[44px] max-h-[300px] custom-scrollbar font-medium"
+              onInput={handleTextareaInput}
             />
+            {recreateRefWarning ? (
+              <p className="text-[10px] text-amber-400/90 px-1 mt-1" role="status">
+                {recreateRefWarning}
+              </p>
+            ) : null}
           </div>
 
           {/* Bottom Row: Uploads + Controls + Generate */}
@@ -472,7 +676,7 @@ export default function MarketingStudio({ apiKey, droppedFiles, onFilesHandled }
                 <UploadSlot 
                   label="Product" 
                   icon={<ProductIcon />} 
-                  url={productImage} 
+                  url={previewUrlForRef(productImage)} 
                   progress={uploadProgress.product} 
                   onUpload={(e) => handleUpload(e, 'product')} 
                   onClear={() => setProductImage(null)} 
@@ -480,7 +684,7 @@ export default function MarketingStudio({ apiKey, droppedFiles, onFilesHandled }
                 <UploadSlot 
                   label="Avatar" 
                   icon={<AvatarIcon />} 
-                  url={avatarImage} 
+                  url={previewUrlForRef(avatarImage)} 
                   progress={uploadProgress.avatar} 
                   onUpload={(e) => handleUpload(e, 'avatar')} 
                   onClear={() => setAvatarImage(null)} 
@@ -488,10 +692,10 @@ export default function MarketingStudio({ apiKey, droppedFiles, onFilesHandled }
                 <UploadSlot 
                   label="References" 
                   icon={<RefIcon />} 
-                  url={additionalImages[0]} 
+                  url={previewUrlForRef(additionalImages[0])} 
                   progress={uploadProgress.additional} 
                   multiple 
-                  images={additionalImages}
+                  images={additionalImages.map(previewUrlForRef).filter(Boolean)}
                   onUpload={(e) => handleUpload(e, 'additional')} 
                   onClear={(idx) => {
                     if (idx !== undefined) {
@@ -571,31 +775,31 @@ export default function MarketingStudio({ apiKey, droppedFiles, onFilesHandled }
               ))}
             </div>
 
-            <button
+            <GenerateCostButton
               onClick={handleGenerate}
               disabled={isGenerating}
-              className="bg-primary text-black px-8 py-2.5 rounded font-bold text-base hover:bg-[#e5ff33] hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3 shadow-glow disabled:opacity-50 disabled:grayscale z-10"
-            >
-              {isGenerating ? (
-                <>
-                  <div className="w-3 h-3 border-2 border-black/20 border-t-black rounded-full animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <span>Launch</span>
-              )}
-            </button>
+              generating={isGenerating}
+              unitCostUsd={unitCostUsd}
+              source={costSource}
+              isLoadingCost={isLoadingCost}
+              primaryLabel="Launch"
+              className="bg-primary text-black px-8 py-2.5 rounded font-bold text-base hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-0.5 shadow-glow disabled:opacity-50 disabled:grayscale z-10 min-w-[120px]"
+            />
           </div>
         </div>
       </div>
 
       {/* Fullscreen Preview */}
-      {fullscreenUrl && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-sm animate-fade-in" onClick={() => setFullscreenUrl(null)}>
-          <button className="absolute top-6 right-6 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white border border-white/10 transition-colors shadow-2xl"><CloseSvg /></button>
-          <video src={fullscreenUrl} controls autoPlay className="max-w-[95vw] max-h-[95vh] rounded-lg shadow-4xl animate-scale-up" onClick={e => e.stopPropagation()} />
-        </div>
-      )}
+      {detailEntry ? (
+        <GenerationDetailViewer
+          entry={detailEntry}
+          mediaType="marketing"
+          onClose={() => setDetailEntry(null)}
+          onDownload={(e) =>
+            e.url && downloadFile(e.url, `marketing-ad-${e.id || "out"}.mp4`)
+          }
+        />
+      ) : null}
     </div>
   );
 }

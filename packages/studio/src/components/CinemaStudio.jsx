@@ -1,9 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { generateImage, uploadFile } from "../muapi.js";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { generateI2IForStudio, generateImageForStudio, uploadFileForStudio } from "../studioGenerate.js";
+import { buildRoutingContext } from "../studioProps.js";
+import { getStudioOpAvailability } from "../studioOpAvailability.js";
+import { resolveProviderForOp } from "../studioCloud.js";
+import { resolveCinemaModelId } from "../modelRegistry.js";
 
-// ─── Constants (inlined from promptUtils) ───────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Constants (inlined from promptUtils) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 const CAMERA_MAP = {
   "Modular 8K Digital": "modular 8K digital cinema camera",
@@ -104,7 +108,7 @@ function buildNanoBananaPrompt(
   return parts.filter((p) => p && p.trim() !== "").join(", ");
 }
 
-// ─── Dropdown ────────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Dropdown Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 function Dropdown({ items, selected, onSelect, triggerRef, onClose }) {
   const menuRef = useRef(null);
@@ -147,7 +151,7 @@ function Dropdown({ items, selected, onSelect, triggerRef, onClose }) {
   );
 }
 
-// ─── Scroll Column (Camera Controls) ─────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Scroll Column (Camera Controls) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 function ScrollColumn({ title, items, columnKey, value, onChange }) {
   const listRef = useRef(null);
@@ -439,16 +443,29 @@ function CameraControlsOverlay({
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Main Component Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 export default function CinemaStudio({
   apiKey,
+  muapiKey,
+  runwareApiKey,
+  routingPrefs,
   onGenerationComplete,
   historyItems,
 }) {
+  const routing = buildRoutingContext({ apiKey, muapiKey, runwareApiKey, routingPrefs });
+  const uploadAvail = useMemo(
+    () => getStudioOpAvailability("cinema", "upload", routing),
+    [
+      routing.routingMode,
+      routing.muapiKey,
+      routing.runwareApiKey,
+      routing.allowMuapiFallback,
+    ],
+  );
   const PERSIST_KEY = "hg_cinema_studio_persistent";
 
-  // ── Settings state ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Settings state Ã¢â€â‚¬Ã¢â€â‚¬
   const [settings, setSettings] = useState({
     prompt: "",
     aspect_ratio: "16:9",
@@ -459,7 +476,7 @@ export default function CinemaStudio({
   });
   const [resolution, setResolution] = useState("2K");
 
-  // ── UI state ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ UI state Ã¢â€â‚¬Ã¢â€â‚¬
   const [isOverlayOpen, setIsOverlayOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [canvasUrl, setCanvasUrl] = useState(null); // null = prompt view
@@ -470,27 +487,31 @@ export default function CinemaStudio({
   const imageInputRef = useRef(null);
   const [activeHistoryIndex, setactiveHistoryIndex] = useState(null);
 
-  // ── Internal history state (used when historyItems prop is not provided) ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Internal history state (used when historyItems prop is not provided) Ã¢â€â‚¬Ã¢â€â‚¬
   const [internalHistory, setInternalHistory] = useState([]);
 
-  // ── Dropdown state ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Dropdown state Ã¢â€â‚¬Ã¢â€â‚¬
   const [openDropdown, setOpenDropdown] = useState(null); // 'ar' | 'res' | null
   const arBtnRef = useRef(null);
   const resBtnRef = useRef(null);
 
-  // ── Textarea auto-grow ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Textarea auto-grow Ã¢â€â‚¬Ã¢â€â‚¬
   const textareaRef = useRef(null);
   const resultImgRef = useRef(null);
 
   const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!uploadAvail.canRun) {
+      alert(uploadAvail.message);
+      return;
+    }
 
     setIsUploadingImage(true);
     setImageUploadProgress(0);
 
     try {
-      const url = await uploadFile(apiKey, file, (progress) => {
+      const url = await uploadFileForStudio(routing, file, (progress) => {
         setImageUploadProgress(progress);
       });
       if (url) setUploadedImage(url);
@@ -507,7 +528,7 @@ export default function CinemaStudio({
     setUploadedImage(null);
   };
 
-  // ── Persistence: Load ────────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Persistence: Load Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   useEffect(() => {
     try {
       const stored = localStorage.getItem(PERSIST_KEY);
@@ -523,7 +544,7 @@ export default function CinemaStudio({
     }
   }, []);
 
-  // ── Adjust height on load ────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Adjust height on load Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   useEffect(() => {
     const timer = setTimeout(() => {
       if (textareaRef.current) {
@@ -535,7 +556,7 @@ export default function CinemaStudio({
     return () => clearTimeout(timer);
   }, []);
 
-  // ── Persistence: Save ────────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Persistence: Save Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   useEffect(() => {
     const timer = setTimeout(() => {
       try {
@@ -564,7 +585,7 @@ export default function CinemaStudio({
   const formatSummaryValue = () =>
     `${settings.lens}, ${settings.focal}mm, ${settings.aperture}`;
 
-  // ── Textarea auto-height ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Textarea auto-height Ã¢â€â‚¬Ã¢â€â‚¬
   const handleTextareaInput = (e) => {
     const el = e.target;
     el.style.height = "auto";
@@ -572,7 +593,7 @@ export default function CinemaStudio({
     setSettings((prev) => ({ ...prev, prompt: el.value }));
   };
 
-  // ── Generate ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Generate Ã¢â€â‚¬Ã¢â€â‚¬
   const handleGenerate = useCallback(async () => {
     const basePrompt = settings.prompt.trim();
     if (!basePrompt || isGenerating) return;
@@ -588,14 +609,24 @@ export default function CinemaStudio({
     );
 
     try {
-      const res = await generateImage(apiKey, {
-        model: uploadedImage ? "nano-banana-pro-edit" : "nano-banana-pro",
+      const op = uploadedImage ? "imageI2i" : "imageT2i";
+      const resolved = resolveProviderForOp("image", op, routing);
+      const modelId = resolveCinemaModelId(!!uploadedImage, resolved.providerId);
+      const genParams = {
+        model: modelId,
         prompt: finalPrompt,
         aspect_ratio: settings.aspect_ratio,
         resolution: resolution.toLowerCase(),
         negative_prompt: "blurry, low quality, distortion, bad composition",
-        images_list: uploadedImage ? [uploadedImage] : [],
-      });
+      };
+      if (uploadedImage) {
+        genParams.images_list = [uploadedImage];
+        genParams.image_url = uploadedImage;
+      }
+
+      const res = uploadedImage
+        ? await generateI2IForStudio(routing, genParams)
+        : await generateImageForStudio(routing, genParams);
 
       if (res && res.url) {
         const entry = {
@@ -622,7 +653,7 @@ export default function CinemaStudio({
         if (onGenerationComplete) {
           onGenerationComplete({
             url: res.url,
-            model: "nano-banana-pro",
+            model: modelId,
             prompt: basePrompt,
             type: "cinema",
           });
@@ -645,14 +676,14 @@ export default function CinemaStudio({
     historyItems,
   ]);
 
-  // ── Regenerate ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Regenerate Ã¢â€â‚¬Ã¢â€â‚¬
   const handleRegenerate = useCallback(() => {
     setCanvasUrl(null);
     // Small delay then generate
     setTimeout(() => handleGenerate(), 300);
   }, [handleGenerate]);
 
-  // ── Download ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Download Ã¢â€â‚¬Ã¢â€â‚¬
   const handleDownload = useCallback(async () => {
     if (!canvasUrl) return;
     try {
@@ -671,7 +702,7 @@ export default function CinemaStudio({
     }
   }, [canvasUrl]);
 
-  // ── Load history item ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Load history item Ã¢â€â‚¬Ã¢â€â‚¬
   const loadHistoryItem = (entry, idx) => {
     if (entry.settings) {
       setSettings((prev) => ({
@@ -706,18 +737,18 @@ export default function CinemaStudio({
     }
   };
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Render Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   return (
     <div className="w-full h-full flex flex-col items-center justify-center bg-black relative overflow-hidden">
       
-      {/* ── CENTRAL GALLERY AREA ── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ CENTRAL GALLERY AREA Ã¢â€â‚¬Ã¢â€â‚¬ */}
       <div className="flex-1 w-full max-w-7xl mx-auto overflow-y-auto custom-scrollbar pb-40 lg:pb-32 px-2">
         {history.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full pt-4 animate-fade-in-up">
             {history.map((entry, idx) => (
               <div
                 key={entry.timestamp ?? idx}
-                className="relative group rounded-lg overflow-hidden border border-white/10 bg-[#0a0a0a] shadow-xl hover:border-[#22d3ee]/50 transition-all duration-300 flex flex-col cursor-pointer"
+                className="relative group rounded-lg overflow-hidden border border-white/10 bg-[#0a0a0a] shadow-xl hover:border-primary/50 transition-all duration-300 flex flex-col cursor-pointer"
                 onClick={() => loadHistoryItem(entry, idx)}
               >
                 <img
@@ -735,7 +766,7 @@ export default function CinemaStudio({
                       e.stopPropagation();
                       setFullscreenUrl(entry.url);
                     }}
-                    className="p-2 bg-black/60 backdrop-blur-md rounded-full text-white hover:bg-[#22d3ee] hover:text-black transition-all border border-white/10"
+                    className="p-2 bg-black/60 backdrop-blur-md rounded-full text-white hover:bg-primary hover:text-black transition-all border border-white/10"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                       <polyline points="15 3 21 3 21 9" />
@@ -764,7 +795,7 @@ export default function CinemaStudio({
                         window.open(entry.url, "_blank");
                       }
                     }}
-                    className="p-2 bg-black/60 backdrop-blur-md rounded-full text-white hover:bg-[#22d3ee] hover:text-black transition-all border border-white/10"
+                    className="p-2 bg-black/60 backdrop-blur-md rounded-full text-white hover:bg-primary hover:text-black transition-all border border-white/10"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                       <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
@@ -778,7 +809,7 @@ export default function CinemaStudio({
                     {entry.settings?.prompt || "No prompt"}
                   </p>
                   <div className="flex items-center justify-between mt-1 flex-wrap gap-1">
-                    <span className="text-[10px] font-bold text-[#22d3ee] px-2 py-0.5 bg-[#22d3ee]/10 rounded border border-[#22d3ee]/20">
+                    <span className="text-[10px] font-bold text-primary px-2 py-0.5 bg-primary/10 rounded border border-primary/20">
                       {entry.settings?.camera || "Standard"}
                     </span>
                     <div className="flex gap-2">
@@ -817,7 +848,7 @@ export default function CinemaStudio({
         )}
       </div>
 
-      {/* ── BOTTOM PROMPT BAR ── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ BOTTOM PROMPT BAR Ã¢â€â‚¬Ã¢â€â‚¬ */}
       <div className="absolute bottom-4 left-4 right-4 md:left-0 md:right-0 md:mx-auto md:max-w-[95%] lg:max-w-4xl z-30 transition-all duration-700 animate-fade-in-up">
         <div className="bg-[#0a0a0a]/80 backdrop-blur-3xl border border-white/10 rounded-md p-4 flex justify-between shadow-2xl items-end relative gap-2">
           {/* Left Column */}
@@ -962,24 +993,24 @@ export default function CinemaStudio({
                   className="flex flex-col items-start justify-center px-4 py-1.5 bg-white/[0.03] rounded-md border border-white/[0.03] hover:border-white/20 transition-all text-left flex-1 min-w-[100px] md:min-w-[160px] max-w-[240px] h-[50px] relative group overflow-hidden"
                   onClick={() => setIsOverlayOpen(true)}
                 >
-                  <div className="absolute top-3 right-3 w-1.5 h-1.5 bg-[#22d3ee] rounded-full shadow-lg shadow-[#22d3ee]/20" />
+                  <div className="absolute top-3 right-3 w-1.5 h-1.5 bg-primary rounded-full shadow-lg shadow-primary/20" />
                   <span className="text-[9px] font-bold text-white/30 uppercase truncate w-full tracking-wider group-hover:text-white transition-colors">
                     {settings.camera}
                   </span>
-                  <span className="text-xs font-semibold text-white/70 truncate w-full group-hover:text-[#22d3ee] transition-colors">
+                  <span className="text-xs font-semibold text-white/70 truncate w-full group-hover:text-primary transition-colors">
                     {formatSummaryValue()}
                   </span>
                 </button>
 
                 {/* Generate Button */}
                 <button
-                  className="h-[50px] px-8 bg-[#22d3ee] text-black rounded-md font-medium text-sm hover:bg-[#e5ff33] hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#22d3ee]/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="h-[50px] px-8 bg-primary text-black rounded-md font-medium text-sm hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/10 disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={isGenerating || !settings.prompt.trim()}
                   onClick={handleGenerate}
                 >
                   {isGenerating ? (
                     <>
-                      <span className="animate-spin inline-block text-black">◌</span> SHOOTING...
+                      <span className="animate-spin inline-block text-black">Ã¢â€”Å’</span> SHOOTING...
                     </>
                   ) : (
                     <>
@@ -1018,7 +1049,7 @@ export default function CinemaStudio({
           />
         </div>
       )}  
-      {/* ── Camera Controls Overlay ── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ Camera Controls Overlay Ã¢â€â‚¬Ã¢â€â‚¬ */}
       <CameraControlsOverlay
         isOpen={isOverlayOpen}
         onClose={() => setIsOverlayOpen(false)}

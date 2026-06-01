@@ -1,0 +1,160 @@
+/** Runware i2i / edit catalog — fork-owned; ADR-005. */
+
+import {
+  liveCatalogEntries,
+  rwI2iEntry,
+  rwReleaseMeta,
+  RUNWARE_PROMPT_INPUT,
+  RUNWARE_TIER_RESOLUTION_INPUT,
+} from './models.runware.shared.js';
+
+const NANO_BANANA_2_EDIT_ASPECT_INPUT = {
+  enum: [
+    '1:1',
+    '1:4',
+    '1:8',
+    '2:3',
+    '3:2',
+    '3:4',
+    '4:1',
+    '4:3',
+    '4:5',
+    '5:4',
+    '8:1',
+    '9:16',
+    '16:9',
+    '21:9',
+    'auto',
+  ],
+  title: 'Aspect Ratio',
+  name: 'aspect_ratio',
+  type: 'string',
+  default: 'auto',
+};
+
+const _all = [
+  rwI2iEntry({
+    id: 'rw-gpt-image-2-i2i',
+    name: 'GPT Image 2 Edit',
+    runwareModel: 'openai:gpt-image@2',
+    taskProfile: 'image-openai-i2i',
+    muapiId: 'gpt-image-2-edit',
+    ...rwReleaseMeta('openai-gpt-image-2', '2026-04-21'),
+  }),
+  rwI2iEntry({
+    id: 'rw-gpt-image-1-5-i2i',
+    name: 'GPT Image 1.5 Edit',
+    runwareModel: 'openai:gpt-image@1.5',
+    taskProfile: 'image-openai-i2i',
+    muapiId: 'gpt-image-1.5-edit',
+    ...rwReleaseMeta('openai-gpt-image-1-5', '2025-12-15'),
+  }),
+  rwI2iEntry({
+    id: 'rw-nano-banana-2-i2i',
+    name: 'Nano Banana 2 Edit',
+    runwareModel: 'google:4@3',
+    muapiId: 'nano-banana-2-edit',
+    ...rwReleaseMeta('nano-banana-2', '2025-08-15'),
+    inputs: {
+      prompt: RUNWARE_PROMPT_INPUT,
+      aspect_ratio: NANO_BANANA_2_EDIT_ASPECT_INPUT,
+      resolution: RUNWARE_TIER_RESOLUTION_INPUT,
+    },
+  }),
+  rwI2iEntry({
+    id: 'rw-nano-banana-pro-i2i',
+    name: 'Nano Banana Pro Edit',
+    runwareModel: 'runware:nano-banana@pro',
+    muapiId: 'nano-banana-pro-edit',
+    ...rwReleaseMeta('nano-banana-pro', '2025-02-15'),
+    inputs: {
+      prompt: RUNWARE_PROMPT_INPUT,
+      aspect_ratio: NANO_BANANA_2_EDIT_ASPECT_INPUT,
+      resolution: RUNWARE_TIER_RESOLUTION_INPUT,
+    },
+  }),
+  rwI2iEntry({
+    id: 'rw-seedream-5-lite-i2i',
+    name: 'Seedream 5.0 Edit',
+    runwareModel: 'runware:seedream@5-lite',
+    muapiId: 'seedream-5.0-edit',
+    ...rwReleaseMeta('seedream-5-0-lite', '2025-09-01'),
+    inputs: {
+      prompt: RUNWARE_PROMPT_INPUT,
+      aspect_ratio: NANO_BANANA_2_EDIT_ASPECT_INPUT,
+      resolution: RUNWARE_TIER_RESOLUTION_INPUT,
+    },
+  }),
+  rwI2iEntry({
+    id: 'rw-flux-2-dev-i2i',
+    name: 'FLUX.2 [dev] Edit',
+    runwareModel: 'runware:flux@2-dev',
+    muapiId: 'flux-2-dev-edit',
+    ...rwReleaseMeta('flux-2-dev', '2025-11-01'),
+  }),
+  rwI2iEntry({
+    id: 'rw-flux-2-pro-i2i',
+    name: 'FLUX.2 [pro] Edit',
+    runwareModel: 'runware:flux@2-pro',
+    muapiId: 'flux-2-pro-edit',
+    ...rwReleaseMeta('flux-2-pro', '2025-11-01'),
+  }),
+  rwI2iEntry({
+    id: 'rw-flux-2-flex-i2i',
+    name: 'FLUX.2 [flex] Edit',
+    runwareModel: 'runware:flux@2-flex',
+    muapiId: 'flux-2-flex-edit',
+    ...rwReleaseMeta('flux-2-flex', '2025-11-01'),
+  }),
+  rwI2iEntry({
+    id: 'rw-flux-2-klein-9b-i2i',
+    name: 'FLUX.2 [klein] 9B Edit',
+    runwareModel: 'runware:flux@2-klein-9b',
+    muapiId: 'flux-2-klein-9b-edit',
+    ...rwReleaseMeta('flux-2-klein-9b', '2025-11-20'),
+  }),
+  rwI2iEntry({
+    id: 'rw-flux-kontext-dev-i2i',
+    name: 'FLUX Kontext Dev Edit',
+    runwareModel: 'runware:flux@kontext-dev',
+    muapiId: 'flux-kontext-dev-edit',
+    ...rwReleaseMeta('flux-1-kontext-dev', '2025-05-28'),
+  }),
+  rwI2iEntry({
+    id: 'rw-kling-image-o3-i2i',
+    name: 'Kling IMAGE O3 Edit',
+    runwareModel: 'runware:kling@image-o3',
+    muapiId: 'kling-o1-edit-image',
+    ...rwReleaseMeta('kling-image-o3', '2025-08-01'),
+  }),
+  rwI2iEntry({
+    id: 'rw-qwen-image-2512-i2i',
+    name: 'Qwen-Image-2512 Edit',
+    runwareModel: 'runware:qwen@image-2512',
+    muapiId: 'qwen-image-2512-edit',
+    ...rwReleaseMeta('qwen-image-2512', '2025-12-01'),
+  }),
+  rwI2iEntry({
+    id: 'rw-recraft-v4-1-i2i',
+    name: 'Recraft V4.1 Edit',
+    runwareModel: 'runware:recraft@v4.1',
+    muapiId: 'recraft-v4-1-edit',
+    ...rwReleaseMeta('recraft-v4-1', '2026-03-01'),
+  }),
+  rwI2iEntry({
+    id: 'rw-grok-imagine-image-i2i',
+    name: 'Grok Imagine Image Edit',
+    runwareModel: 'runware:grok@imagine-image',
+    muapiId: 'grok-imagine-image-edit',
+    ...rwReleaseMeta('grok-imagine-image-quality', '2025-05-01'),
+  }),
+  rwI2iEntry({
+    id: 'rw-wan-image-i2i',
+    name: 'Wan2.7 Image Edit',
+    runwareModel: 'runware:wan@2.7-image',
+    muapiId: 'wan2.7-image-edit',
+    ...rwReleaseMeta('wan2-7-image', '2025-07-15'),
+  }),
+];
+
+export const runwareI2iModels = liveCatalogEntries(_all);

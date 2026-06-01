@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-generative-ai.run/schemas/runwareModelEntry.json",
+  "title": "RunwareModelEntry",
+  "type": "object",
+  "required": ["id", "name", "provider", "runwareModel", "modality", "status", "releaseDate", "provenance"],
+  "additionalProperties": true,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^rw-[a-z0-9-]+$"
+    },
+    "name": { "type": "string", "minLength": 1 },
+    "provider": { "const": "runware" },
+    "runwareModel": {
+      "type": "string",
+      "pattern": "^(runware|civitai|openai):"
+    },
+    "modality": {
+      "type": "string",
+      "enum": ["image", "video", "audio"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["live", "deprecated"]
+    },
+    "releaseDate": {
+      "type": "string",
+      "format": "date"
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["docUrl", "verifiedAt"],
+      "properties": {
+        "docUrl": { "type": "string", "format": "uri" },
+        "verifiedAt": { "type": "string", "format": "date" },
+        "source": {
+          "type": "string",
+          "enum": ["runware-docs", "vendor", "manual"]
+        }
+      }
+    },
+    "taskProfile": {
+      "type": "string",
+      "enum": ["image-standard", "image-openai", "video-standard", "video-sota", "audio-standard"]
+    },
+    "inputs": { "type": "object" }
+  }
+}

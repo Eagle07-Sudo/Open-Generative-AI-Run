@@ -11,10 +11,25 @@
     "packages/Open-AI-Design-Agent/packages/design-agent"
   ],
   "scripts": {
+    "gen:preferences-boot": "node scripts/gen-preferences-boot.mjs",
+    "predev": "node scripts/gen-preferences-boot.mjs",
+    "prebuild": "node scripts/gen-preferences-boot.mjs && npm run check:studio-controls && npm test",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "node --test tests/**/*.test.js",
+    "check:providers": "node scripts/check-no-muapi-in-studios.mjs && node scripts/check-studio-routing-context.mjs",
+    "check:runware-catalog": "node scripts/sync-runware-catalog.mjs --validate --provenance",
+    "check:muapi-dates": "node scripts/audit-muapi-dates.mjs --coverage",
+    "check:catalog-freshness": "npm run check:runware-catalog && npm run check:muapi-dates",
+    "check:parity-matrix": "node scripts/validate-parity-matrix.mjs",
+    "check:runware-live": "node scripts/runware-catalog-smoke.mjs --live",
+    "check:runware-smoke": "node scripts/runware-catalog-smoke.mjs --dry-run",
+    "check:full-parity": "npm run test && npm run check:studio-controls && npm run check:parity-matrix && npm run check:catalog-freshness && npm run check:providers && npm run check:runware-smoke",
+    "check:studio-controls": "node scripts/audit-studio-controls.mjs",
+    "security:secrets": "node scripts/gitleaks-detect.mjs filesystem",
+    "security:secrets:git": "node scripts/gitleaks-detect.mjs git",
     "build:studio": "npm run build -w studio",
     "build:workflow": "npm run build -w workflow-builder",
     "build:agent": "npm run build -w ai-agent",
@@ -113,14 +128,15 @@
     }
   },
   "dependencies": {
+    "ai-agent": "file:./packages/Open-Poe-AI/packages/agents",
     "axios": "^1.7.0",
     "next": "^15.0.0",
+    "next-themes": "^0.4.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hot-toast": "^2.4.1",
     "studio": "*",
-    "workflow-builder": "file:./packages/Vibe-Workflow/packages/workflow-builder",
-    "ai-agent": "file:./packages/Open-Poe-AI/packages/agents"
+    "workflow-builder": "file:./packages/Vibe-Workflow/packages/workflow-builder"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

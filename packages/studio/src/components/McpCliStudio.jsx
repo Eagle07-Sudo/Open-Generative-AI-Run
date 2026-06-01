@@ -9,7 +9,7 @@ const FEATURES = [
     title: 'muapi-cli',
     icon: FaTerminal,
     description:
-      'Generate images, videos, and audio from the terminal across 14+ AI models. Dual interface — colored human output plus JSON for agents (--output-json, --jq filtering). Async workflows, file uploads, credit tracking.',
+      'Generate images, videos, and audio from the terminal across 14+ AI models. Dual interface Ã¢â‚¬â€ colored human output plus JSON for agents (--output-json, --jq filtering). Async workflows, file uploads, credit tracking.',
     code: `npm install -g muapi-cli
 muapi auth login
 muapi image generate "a cyberpunk city" \\
@@ -21,7 +21,7 @@ muapi image generate "a cyberpunk city" \\
     title: 'muapi-mcp-server',
     icon: FaPlug,
     description:
-      'Connect Claude, Cursor, Windsurf, and any MCP-compatible assistant to 100+ generative models. Hosted endpoint — no install. 19 structured tools with input/output schemas, async polling, and account management.',
+      'Connect Claude, Cursor, Windsurf, and any MCP-compatible assistant to 100+ generative models. Hosted endpoint Ã¢â‚¬â€ no install. 19 structured tools with input/output schemas, async polling, and account management.',
     code: `claude mcp add --transport http muapi \\
   https://api.muapi.ai/mcp \\
   --header "Authorization: Bearer YOUR_KEY"`,
@@ -54,7 +54,7 @@ const EXAMPLES = [
 function CodeBlock({ children, className = '' }) {
   return (
     <pre
-      className={`text-[11.5px] font-mono text-[#22d3ee] bg-black/50 border border-white/5 rounded-md px-3 py-2 overflow-x-auto whitespace-pre ${className}`}
+      className={`text-[11.5px] font-mono text-primary bg-black/50 border border-white/5 rounded-md px-3 py-2 overflow-x-auto whitespace-pre ${className}`}
     >
       {children}
     </pre>
@@ -74,7 +74,7 @@ export default function McpCliStudio() {
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight">MCP &amp; CLI</h1>
           <p className="text-white/60 text-base md:text-lg max-w-2xl">
             Use Open Generative AI from your terminal, your IDE, or any MCP-compatible
-            assistant. Generate cinematic images, videos, and audio across 100+ models —
+            assistant. Generate cinematic images, videos, and audio across 100+ models Ã¢â‚¬â€
             without leaving your workflow.
           </p>
         </section>
@@ -154,7 +154,7 @@ export default function McpCliStudio() {
         </section>
 
         <p className="text-center text-xs text-white/40 pb-4">
-          Open-source · MIT licensed · Works with Claude, Cursor, Windsurf, and Gemini CLI
+          Open-source Ã‚Â· MIT licensed Ã‚Â· Works with Claude, Cursor, Windsurf, and Gemini CLI
         </p>
       </div>
     </div>

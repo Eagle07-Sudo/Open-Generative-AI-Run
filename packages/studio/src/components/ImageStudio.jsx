@@ -1,22 +1,140 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { generateImage, generateI2I, uploadFile } from "../muapi.js";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { generateI2IForStudio, stageFileForStudio, generateImageForStudio } from "../studioGenerate.js";
+import { formatRunwareErrorForStudio } from "../providers/runware.js";
+import MediaPreviewThumb from "./media/MediaPreviewThumb.jsx";
+import MentionPromptField from "./media/MentionPromptField.jsx";
 import {
-  t2iModels,
-  i2iModels,
-  getAspectRatiosForModel,
-  getResolutionsForModel,
-  getQualityFieldForModel,
-  getAspectRatiosForI2IModel,
-  getResolutionsForI2IModel,
-  getQualityFieldForI2IModel,
-  getMaxImagesForI2IModel,
-  getEffectsForI2IModel,
-  getDefaultEffectForI2IModel,
-} from "../models.js";
+  assetsToManifest,
+  restoreAssetsForRecreate,
+  isStudioAssetRestored,
+  manifestFromAssetLabels,
+} from "../media/studioAssetPersist.js";
+import {
+  clearStudioRegistry,
+  getStudioAsset,
+  removeStudioAsset,
+} from "../media/studioAssetRegistry.js";
+import {
+  cardMentionAssets,
+  extractCardLabels,
+  stripMentionsFromPrompt,
+} from "../media/cardMentionAssets.js";
+import { isAssetLabel } from "../media/previewSrc.js";
+import { useStudioGenerationCost } from "../cost/useStudioGenerationCost.js";
+import GenerateCostButton from "./GenerateCostButton.jsx";
+import BatchSizeStepper from "./BatchSizeStepper.jsx";
+import TierOptionDropdown, { formatTierChipLabel } from "./TierOptionDropdown.jsx";
+import ModelInputChipRow from "./ModelInputChipRow.jsx";
+import { formatCostUsd } from "../cost/formatGenerateLabel.js";
 
-// ─── helpers ────────────────────────────────────────────────────────────────
+/** @param {unknown} ref */
+function uploadEntryFromRef(ref) {
+  if (!ref) return null;
+  if (typeof ref === "string") {
+    if (isAssetLabel(ref)) {
+      const a = getStudioAsset("image", ref);
+      return {
+        label: ref,
+        url: a?.thumbUrl || "",
+        previewUrl: a?.previewUrl || "",
+      };
+    }
+    return { url: ref, previewUrl: ref };
+  }
+  if (typeof ref === "object") {
+    const label =
+      typeof ref.label === "string"
+        ? ref.label
+        : isAssetLabel(ref.url)
+          ? ref.url
+          : null;
+    if (label) {
+      const a = getStudioAsset("image", label);
+      const legacyBlob =
+        typeof ref.url === "string" && ref.url.startsWith("blob:") ? ref.url : "";
+      return {
+        label,
+        url: a?.thumbUrl || legacyBlob,
+        previewUrl: a?.previewUrl || ref.previewUrl || legacyBlob,
+      };
+    }
+    if (typeof ref.url === "string") {
+      return {
+        url: ref.url,
+        previewUrl: typeof ref.previewUrl === "string" ? ref.previewUrl : ref.url,
+        label: typeof ref.label === "string" ? ref.label : undefined,
+      };
+    }
+  }
+  return null;
+}
+import { resolveProviderForOp, providerDisplayLabel } from "../studioCloud.js";
+import { buildRoutingContext } from "../studioProps.js";
+import { getStudioOpAvailability } from "../studioOpAvailability.js";
+import {
+  getT2iModelsForProvider,
+  getT2iModelById,
+  getModelByIdForStudio,
+  getUnifiedModelSections,
+  flattenModelSections,
+  getAspectRatiosForT2iModel,
+  getAspectRatiosForI2iModel,
+  getResolutionsForT2iModel,
+  getResolutionsForI2iModel,
+  getQualityFieldForT2iModel,
+  getQualityFieldForI2iModel,
+  getQualityOptionsForT2iModel,
+  getQualityEnumOptionsForT2iModel,
+  getResolutionTierOptionsForT2iModel,
+  getModelInputOptionsForField,
+  modelHasT2iQualityInput,
+  modelHasT2iResolutionInput,
+  getModelInputDefault,
+  clampModelInputSelection,
+  getEffectsForModelRegistry,
+  getDefaultEffectForModelRegistry,
+  getMaxImagesForI2IModel,
+} from "../modelRegistry.js";
+import { loadModelPick, saveModelPick } from "../modelPickerPersist.js";
+import UnifiedModelDropdown from "./UnifiedModelDropdown.jsx";
+import { i2iModels } from "../models.js";
+import { isTierResolutionOptions } from "../schemaWidgetUtils.js";
+import { useOptimisticGenerationHistory } from "../hooks/useOptimisticGenerationHistory.js";
+import GenerationHistoryCard from "./GenerationHistoryCard.jsx";
+import GenerationDetailViewer from "./GenerationDetailViewer.jsx";
+import CatalogInputChips from "./CatalogInputChips.jsx";
+import {
+  buildGenerationSnapshot,
+  subscribeStudioRecreate,
+  subscribeStudioRetry,
+} from "../studioRecreate.js";
+import { CONTROL_STRINGS } from "../lib/controlStrings.js";
+import SeedControl from "./SeedControl.jsx";
+import {
+  modelSupportsSeed,
+  seedForSnapshot,
+  seedsForBatch,
+  applySeedToParams,
+  usedSeedFromResponse,
+  advanceSeed,
+  snapshotWithCardSeed,
+} from "../lib/seedControl.js";
+import { STUDIO_PERSIST_MAX_BYTES } from "../media/studioPersistSafety.js";
+
+// fork: theme-aware prompt composer (studio-theme.css component classes)
+const PROMPT_CHIP =
+  "flex items-center gap-2 px-3 py-2 studio-control rounded-md transition-all group whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40";
+const PROMPT_CHIP_LABEL_SM =
+  "text-[11px] font-semibold text-foreground-secondary group-hover:text-primary transition-colors";
+const PROMPT_CHIP_LABEL =
+  "text-xs font-semibold text-foreground-secondary group-hover:text-primary transition-colors";
+const PROMPT_POPOVER =
+  "absolute bottom-[calc(100%+12px)] left-0 z-50 studio-popover rounded-lg p-3 shadow-2xl custom-scrollbar";
+const PROMPT_ICON = "opacity-40 text-foreground-muted group-hover:opacity-100";
+
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 async function downloadImage(url, filename) {
   try {
@@ -35,9 +153,30 @@ async function downloadImage(url, filename) {
   }
 }
 
-// ─── UploadButton (inline picker) ───────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ UploadButton (inline picker) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
-function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [] }) {
+/**
+ * @param {{
+ *   routing: ReturnType<typeof buildRoutingContext>,
+ *   apiKey?: string,
+ *   maxImages: number,
+ *   onSelect: (payload: { url: string, urls: string[], thumbnail: string }) => void,
+ *   onClear?: () => void,
+ *   initialUrls?: string[],
+ * }} props
+ */
+const STAGE_UPLOAD_TIMEOUT_MS = 45_000;
+
+function withTimeout(promise, ms, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(message)), ms);
+    }),
+  ]);
+}
+
+function UploadButton({ routing, apiKey, maxImages, onSelect, onClear, initialUrls = [] }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [selectedEntries, setSelectedEntries] = useState([]); // [{url, thumbnail}]
@@ -46,6 +185,8 @@ function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [] }
   const fileInputRef = useRef(null);
   const panelRef = useRef(null);
   const triggerRef = useRef(null);
+  /** @type {import('react').MutableRefObject<Set<string>>} */
+  const cancelledUploadIdsRef = useRef(new Set());
 
   // Close on outside click
   useEffect(() => {
@@ -68,43 +209,99 @@ function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [] }
   useEffect(() => {
     if (initialUrls && initialUrls.length > 0) {
       // Avoid infinite loops by only updating if URLs actually changed
-      const currentUrls = selectedEntries.map(e => e.url);
-      const isSame = initialUrls.length === currentUrls.length && initialUrls.every(u => currentUrls.includes(u));
+      const currentKeys = selectedEntries.map((e) => e.label || e.url);
+      const isSame =
+        initialUrls.length === currentKeys.length &&
+        initialUrls.every((u) => currentKeys.includes(u));
       if (isSame) return;
 
-      const newEntries = initialUrls.map(url => ({ url }));
-      setSelectedEntries(newEntries);
-      
-      // Also ensure they are in the history panel
-      setUploadHistory(prev => {
-        const existingUrls = prev.map(h => h.url);
+      const newEntries = initialUrls
+        .map((ref) => uploadEntryFromRef(ref))
+        .filter(Boolean);
+      if (newEntries.length) setSelectedEntries(newEntries);
+
+      setUploadHistory((prev) => {
+        const existingKeys = new Set(
+          prev.map((h) => h.label || h.url).filter(Boolean),
+        );
         const missing = initialUrls
-          .filter(u => !existingUrls.includes(u))
-          .map(u => ({ id: `restored-${u}`, name: "Restored Image", url: u, progress: 100 }));
-        return [...missing, ...prev];
+          .map((ref) => uploadEntryFromRef(ref))
+          .filter((e) => e && !existingKeys.has(e.label || e.url))
+          .map((e) => {
+            const thumb = e.url || e.previewUrl || null;
+            return {
+              id: `restored-${e.label || e.url}`,
+              name: "Restored Image",
+              url: thumb,
+              label: e.label,
+              progress: thumb ? 100 : 0,
+              status: thumb ? "ready" : "failed",
+            };
+          });
+        return missing.length ? [...missing, ...prev] : prev;
       });
     }
   }, [initialUrls]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const scheduleParentClear = useCallback(() => {
+    if (!onClear) return;
+    queueMicrotask(() => onClear());
+  }, [onClear]);
 
   // When maxImages changes, trim excess selections
   useEffect(() => {
     if (selectedEntries.length > maxImages) {
       const trimmed = selectedEntries.slice(0, maxImages);
       setSelectedEntries(trimmed);
-      if (trimmed.length === 0) onClear?.();
+      if (trimmed.length === 0) scheduleParentClear();
     }
     if (fileInputRef.current) {
       fileInputRef.current.multiple = maxImages > 1;
     }
-  }, [maxImages]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [maxImages, selectedEntries.length, scheduleParentClear]);
+
+  useEffect(() => {
+    const pending = uploadHistory.some((h) => h.status === "uploading" && !h.url);
+    if (!pending && uploading) {
+      setUploading(false);
+      setLastUploadProgress(0);
+    }
+  }, [uploadHistory, uploading]);
 
   const fireOnSelect = useCallback(
     (entries) => {
       if (!entries.length) return;
-      const urls = entries.map((e) => e.url);
-      onSelect({ url: urls[0], urls, thumbnail: entries[0].url });
+      const labels = entries.map((e) => e.label || e.url);
+      onSelect({
+        url: labels[0],
+        urls: labels,
+        thumbnail: entries[0].url,
+      });
     },
     [onSelect],
+  );
+
+  const removeHistoryEntry = useCallback(
+    (entry) => {
+      cancelledUploadIdsRef.current.add(entry.id);
+      if (entry.label) removeStudioAsset("image", entry.label);
+      if (entry.localUrl) URL.revokeObjectURL(entry.localUrl);
+
+      setUploadHistory((prev) => prev.filter((h) => h.id !== entry.id));
+
+      let shouldClearParent = false;
+      setSelectedEntries((prev) => {
+        const next = prev.filter((s) => {
+          if (entry.label && s.label) return s.label !== entry.label;
+          if (entry.url && s.url) return s.url !== entry.url;
+          return true;
+        });
+        if (next.length === 0) shouldClearParent = true;
+        return next;
+      });
+      if (shouldClearParent) scheduleParentClear();
+    },
+    [scheduleParentClear],
   );
 
   const handleFileChange = async (e) => {
@@ -131,32 +328,48 @@ function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [] }
       await Promise.all(
         toUpload.map(async (file) => {
           const id = Date.now().toString() + Math.random();
+          cancelledUploadIdsRef.current.delete(id);
 
-          // Add a placeholder to history immediately without local preview
-          const placeholder = { id, name: file.name, url: null, progress: 0 };
+          const placeholder = {
+            id,
+            name: file.name,
+            url: null,
+            progress: 0,
+            status: "uploading",
+          };
           setUploadHistory((prev) => [placeholder, ...prev]);
 
           try {
-            const uploadedUrl = await uploadFile(apiKey, file, (pct) => {
-              setLastUploadProgress(pct);
-              setUploadHistory((prev) =>
-                prev.map((h) => (h.id === id ? { ...h, progress: pct } : h)),
-              );
-            });
+            const asset = await withTimeout(
+              stageFileForStudio("image", file),
+              STAGE_UPLOAD_TIMEOUT_MS,
+              "Image staging timed out. Cancel and try again.",
+            );
 
-            // Update history with real URL and Mark as 100%
+            if (cancelledUploadIdsRef.current.has(id)) return;
+
+            setLastUploadProgress(100);
             setUploadHistory((prev) =>
               prev.map((h) => {
                 if (h.id === id) {
-                  return { ...h, url: uploadedUrl, progress: 100 };
+                  return {
+                    ...h,
+                    url: asset.thumbUrl,
+                    label: asset.label,
+                    progress: 100,
+                    status: "ready",
+                  };
                 }
                 return h;
               }),
             );
 
-            // Auto-select if there's room
             if (selectedEntries.length < maxImages) {
-              const newEntry = { url: uploadedUrl };
+              const newEntry = {
+                url: asset.thumbUrl,
+                label: asset.label,
+                previewUrl: asset.previewUrl,
+              };
               setSelectedEntries((prev) => [...prev, newEntry]);
 
               if (maxImages === 1) {
@@ -165,14 +378,23 @@ function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [] }
               }
             }
           } catch (err) {
+            if (cancelledUploadIdsRef.current.has(id)) return;
             console.error("[UploadButton] Upload failed for", file.name, err);
-            setUploadHistory((prev) => prev.filter((h) => h.id !== id));
-            throw err;
+            setUploadHistory((prev) =>
+              prev.map((h) =>
+                h.id === id
+                  ? {
+                      ...h,
+                      status: "failed",
+                      progress: 0,
+                      error: err?.message || "Upload failed",
+                    }
+                  : h,
+              ),
+            );
           }
         }),
       );
-    } catch (err) {
-      alert(`Image upload failed: ${err.message}`);
     } finally {
       setUploading(false);
       setLastUploadProgress(0);
@@ -180,7 +402,12 @@ function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [] }
   };
 
   const handleCellClick = (entry) => {
-    const selIdx = selectedEntries.findIndex((e) => e.url === entry.url);
+    if (!entry.url) return;
+    const selIdx = selectedEntries.findIndex(
+      (e) =>
+        (entry.label && e.label === entry.label) ||
+        (entry.url && e.url === entry.url),
+    );
     const isSelected = selIdx !== -1;
     const atMax =
       maxImages > 1 && !isSelected && selectedEntries.length >= maxImages;
@@ -195,7 +422,7 @@ function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [] }
       let next;
       if (isSelected) {
         next = selectedEntries.filter((_, i) => i !== selIdx);
-        if (next.length === 0) onClear?.();
+        if (next.length === 0) scheduleParentClear();
       } else {
         next = [
           ...selectedEntries,
@@ -208,14 +435,7 @@ function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [] }
 
   const handleRemoveFromHistory = (e, entry) => {
     e.stopPropagation();
-    if (entry.localUrl) URL.revokeObjectURL(entry.localUrl);
-    setUploadHistory((prev) => prev.filter((h) => h.id !== entry.id));
-
-    const next = selectedEntries.filter((s) => s.url !== entry.url);
-    if (next.length !== selectedEntries.length) {
-      setSelectedEntries(next);
-      if (next.length === 0) onClear?.();
-    }
+    removeHistoryEntry(entry);
   };
 
   const handleDone = (e) => {
@@ -229,7 +449,7 @@ function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [] }
     setPanelOpen(false);
   };
 
-  // expose reset via ref pattern — parent calls reset() directly
+  // expose reset via ref pattern Ã¢â‚¬â€ parent calls reset() directly
   // (handled by parent through uploadedImageUrls state reset)
 
   const isMulti = maxImages > 1;
@@ -253,7 +473,7 @@ function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [] }
               stroke="currentColor"
               strokeWidth="2"
               fill="transparent"
-              className="text-white/10"
+              className="text-foreground-muted"
             />
             <circle
               cx="16"
@@ -339,11 +559,13 @@ function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [] }
               </div>
             )}
           </div>
-        ) : mainEntry?.url ? (
-          <img
-            src={mainEntry.url}
-            alt=""
-            className={`w-full h-full object-cover transition-all duration-300 ${
+        ) : mainEntry?.url || mainEntry?.label ? (
+          <MediaPreviewThumb
+            studioId="image"
+            asset={mainEntry.label ? getStudioAsset("image", mainEntry.label) : undefined}
+            url={mainEntry.url || mainEntry.label}
+            kind="image"
+            className={`w-full h-full transition-all duration-300 ${
               uploading && hasSelection ? "blur-[2px] scale-110 opacity-60" : "blur-0 scale-100 opacity-100"
             }`}
           />
@@ -385,9 +607,9 @@ function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [] }
 
   const triggerTitle = hasSelection
     ? count > 1
-      ? `${count} of ${maxImages} images selected — click to manage`
+      ? `${count} of ${maxImages} images selected Ã¢â‚¬â€ click to manage`
       : isMulti
-        ? `1 image selected — click to add more (up to ${maxImages})`
+        ? `1 image selected Ã¢â‚¬â€ click to add more (up to ${maxImages})`
         : "Reference image"
     : isMulti
       ? `Add up to ${maxImages} images`
@@ -414,10 +636,10 @@ function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [] }
           e.stopPropagation();
           setPanelOpen((o) => !o);
         }}
-        className={`w-10 h-10 shrink-0 rounded-full border transition-all flex items-center justify-center relative overflow-hidden mt-1.5 bg-white/5 hover:bg-white/10 group ${
+        className={`w-10 h-10 shrink-0 rounded-full border transition-all flex items-center justify-center relative overflow-hidden mt-1.5 studio-control group ${
           hasSelection
             ? "border-primary/60 hover:border-primary/40"
-            : "border-white/10 hover:border-primary/40"
+            : "border-border-subtle hover:border-primary/40"
         }`}
       >
         {triggerContent}
@@ -428,10 +650,10 @@ function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [] }
         <div
           ref={panelRef}
           onClick={(e) => e.stopPropagation()}
-          className="absolute z-50 bottom-[calc(100%+8px)] left-0 bg-[#111] rounded-xl p-3 shadow-4xl border border-white/10 w-96"
+          className="absolute z-50 bottom-[calc(100%+8px)] left-0 studio-popover rounded-xl p-3 w-96"
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-1 pb-3 mb-2 border-b border-white/5">
+          <div className="flex items-center justify-between px-1 pb-3 mb-2 border-b border-border-subtle">
             <div className="flex flex-col gap-0.5">
               <span className="text-xs font-bold text-secondary">
                 Reference Images
@@ -449,7 +671,7 @@ function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [] }
                   onClick={handleDone}
                   className="flex items-center gap-1 px-3 py-1.5 bg-primary text-black rounded-xl text-xs font-black transition-all hover:scale-105"
                 >
-                  ✓ Done ({count})
+                  Ã¢Å“â€œ Done ({count})
                 </button>
               )}
               <button
@@ -499,23 +721,33 @@ function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [] }
           ) : (
             <div className="grid grid-cols-3 gap-2 max-h-56 overflow-y-auto custom-scrollbar pr-0.5">
               {uploadHistory.map((entry) => {
+                const isPending = entry.status === "uploading" && !entry.url;
+                const isFailed = entry.status === "failed";
                 const selIdx = selectedEntries.findIndex(
-                  (e) => e.url === entry.url,
+                  (e) =>
+                    (entry.label && e.label === entry.label) ||
+                    (entry.url && e.url === entry.url),
                 );
-                const isSelected = selIdx !== -1;
+                const isSelected = selIdx !== -1 && Boolean(entry.url);
                 const atMax =
                   isMulti && !isSelected && selectedEntries.length >= maxImages;
 
                 return (
                   <div
                     key={entry.id}
-                    title={entry.name}
+                    title={
+                      isFailed
+                        ? entry.error || "Upload failed — remove to retry"
+                        : entry.name
+                    }
                     onClick={() => entry.url && handleCellClick(entry)}
-                    className={`relative rounded-xl overflow-hidden border-2 cursor-pointer group/cell aspect-square transition-all ${
+                    className={`relative rounded-xl overflow-hidden border-2 group/cell aspect-square transition-all ${
                       isSelected
-                        ? "border-primary shadow-glow"
-                        : "border-white/10 hover:border-white/30"
-                    } ${atMax ? "opacity-40 cursor-not-allowed" : ""} ${!entry.url ? "cursor-wait" : ""}`}
+                        ? "border-primary shadow-glow cursor-pointer"
+                        : isFailed
+                          ? "border-red-500/50 cursor-default"
+                          : "border-border-subtle hover:border-foreground-muted"
+                    } ${atMax ? "opacity-40 cursor-not-allowed" : ""} ${isPending ? "cursor-default" : entry.url ? "cursor-pointer" : ""}`}
                   >
                     {entry.url ? (
                       <img
@@ -523,38 +755,60 @@ function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [] }
                         alt={entry.name}
                         className="w-full h-full object-cover"
                       />
+                    ) : isFailed ? (
+                      <div className="w-full h-full bg-card-bg flex flex-col items-center justify-center gap-1 px-1 text-center">
+                        <span className="text-[9px] font-bold text-red-400 leading-tight">
+                          Failed
+                        </span>
+                        <span className="text-[8px] text-muted line-clamp-2">
+                          {entry.error || "Upload error"}
+                        </span>
+                      </div>
                     ) : (
-                      <div className="w-full h-full bg-white/5 flex flex-col items-center justify-center">
+                      <div className="w-full h-full bg-card-bg flex flex-col items-center justify-center">
                         <div className="w-8 h-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin mb-1" />
                         <span className="text-[10px] font-black text-primary">
-                          {entry.progress}%
+                          {isPending ? "…" : `${entry.progress}%`}
                         </span>
                       </div>
                     )}
 
-                    {/* Hover overlay with delete */}
-                    {entry.url && (
-                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover/cell:opacity-100 transition-opacity flex items-end justify-end p-1">
-                        <button
-                          type="button"
-                          title="Remove from history"
-                          onClick={(e) => handleRemoveFromHistory(e, entry)}
-                          className="w-5 h-5 bg-red-500/80 hover:bg-red-500 rounded-md flex items-center justify-center transition-colors"
+                    {/* Remove / cancel — always visible (including stuck uploads) */}
+                    <div
+                      className={`absolute top-1 right-1 z-10 flex items-center gap-1 ${
+                        entry.url
+                          ? "opacity-100 sm:opacity-0 sm:group-hover/cell:opacity-100"
+                          : "opacity-100"
+                      } transition-opacity`}
+                    >
+                      {isPending && (
+                        <span className="text-[8px] font-bold text-white/90 bg-black/70 px-1 rounded">
+                          Cancel
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        title={
+                          isPending
+                            ? "Cancel upload and remove"
+                            : "Remove from history"
+                        }
+                        onClick={(e) => handleRemoveFromHistory(e, entry)}
+                        className="w-6 h-6 bg-red-500 hover:bg-red-600 rounded-md flex items-center justify-center transition-colors shadow-md"
+                      >
+                        <svg
+                          width="10"
+                          height="10"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="white"
+                          strokeWidth="3"
                         >
-                          <svg
-                            width="8"
-                            height="8"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="white"
-                            strokeWidth="3"
-                          >
-                            <line x1="18" y1="6" x2="6" y2="18" />
-                            <line x1="6" y1="6" x2="18" y2="18" />
-                          </svg>
-                        </button>
-                      </div>
-                    )}
+                          <line x1="18" y1="6" x2="6" y2="18" />
+                          <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                      </button>
+                    </div>
 
                     {/* Selection badge */}
                     {isSelected && (
@@ -585,7 +839,7 @@ function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [] }
 
           {/* Bottom bar for multi-select */}
           {isMulti && hasSelection && (
-            <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
+            <div className="mt-3 pt-3 border-t border-border-subtle flex items-center justify-between">
               <span className="text-xs text-secondary">
                 {count} of {maxImages} selected
               </span>
@@ -604,7 +858,7 @@ function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [] }
   );
 }
 
-// ─── ModelDropdown ────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ ModelDropdown Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 function ModelDropdown({ models, selectedModel, onSelect, onClose }) {
   const [search, setSearch] = useState("");
@@ -617,8 +871,8 @@ function ModelDropdown({ models, selectedModel, onSelect, onClose }) {
 
   return (
     <div className="flex flex-col gap-2 h-full max-h-[60vh]">
-      <div className="border-b border-white/5 shrink-0">
-        <div className="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-2.5 border border-white/5 focus-within:border-primary/50 transition-colors">
+      <div className="border-b border-border-subtle shrink-0">
+        <div className="flex items-center gap-3 bg-card-bg rounded-xl px-4 py-2.5 border border-border-subtle focus-within:border-primary/50 transition-colors">
           <svg
             width="14"
             height="14"
@@ -637,7 +891,7 @@ function ModelDropdown({ models, selectedModel, onSelect, onClose }) {
             value={search}
             onClick={(e) => e.stopPropagation()}
             onChange={(e) => setSearch(e.target.value)}
-            className="bg-transparent border-none text-xs text-white focus:ring-0 w-full p-0 focus:outline-none"
+            className="bg-transparent border-none text-xs text-foreground focus:ring-0 w-full p-0 focus:outline-none placeholder:text-foreground-muted"
           />
         </div>
       </div>
@@ -653,8 +907,8 @@ function ModelDropdown({ models, selectedModel, onSelect, onClose }) {
               onSelect(m);
               onClose();
             }}
-            className={`flex items-center justify-between p-3.5 hover:bg-white/5 rounded-lg cursor-pointer transition-all border border-transparent hover:border-white/5 ${
-              selectedModel === m.id ? "bg-white/5 border-white/5" : ""
+            className={`flex items-center justify-between p-3.5 hover:bg-card-bg rounded-lg cursor-pointer transition-all border border-transparent hover:border-border-subtle ${
+              selectedModel === m.id ? "bg-card-bg border-border-subtle" : ""
             }`}
           >
             <div className="flex items-center gap-3.5">
@@ -665,12 +919,12 @@ function ModelDropdown({ models, selectedModel, onSelect, onClose }) {
                     : m.family === "effects"
                       ? "bg-purple-500/10 text-purple-400"
                       : "bg-primary/10 text-primary"
-                } border border-white/5 rounded-full flex items-center justify-center font-bold text-xs shadow-inner uppercase`}
+                } border border-border-subtle rounded-full flex items-center justify-center font-bold text-xs shadow-inner uppercase`}
               >
                 {m.name.charAt(0)}
               </div>
               <div className="flex flex-col gap-0.5">
-                <span className="text-xs font-bold text-white tracking-tight">
+                <span className="text-xs font-bold text-foreground tracking-tight">
                   {m.name}
                 </span>
               </div>
@@ -681,7 +935,7 @@ function ModelDropdown({ models, selectedModel, onSelect, onClose }) {
                 height="16"
                 viewBox="0 0 24 24"
                 fill="none"
-                stroke="#22d3ee"
+                stroke="currentColor"
                 strokeWidth="4"
               >
                 <polyline points="20 6 9 17 4 12" />
@@ -694,12 +948,12 @@ function ModelDropdown({ models, selectedModel, onSelect, onClose }) {
   );
 }
 
-// ─── SimpleDropdown ───────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ SimpleDropdown Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 function SimpleDropdown({ title, options, selected, onSelect, onClose }) {
   return (
     <>
-      <div className="text-xs font-medium text-muted pb-2 border-b border-white/5 mb-2">
+      <div className="text-xs font-medium text-foreground-muted pb-2 border-b border-border-subtle mb-2">
         {title}
       </div>
       <div className="flex flex-col gap-1">
@@ -711,9 +965,9 @@ function SimpleDropdown({ title, options, selected, onSelect, onClose }) {
               onSelect(opt);
               onClose();
             }}
-            className="flex items-center justify-between p-2 hover:bg-white/5 rounded-md cursor-pointer transition-all group"
+            className="flex items-center justify-between p-2 hover:bg-card-bg rounded-md cursor-pointer transition-all group"
           >
-            <span className="text-xs font-bold text-white opacity-80 group-hover:opacity-100">
+            <span className="text-xs font-bold text-foreground-secondary group-hover:text-foreground">
               {opt}
             </span>
             {selected === opt && (
@@ -722,7 +976,7 @@ function SimpleDropdown({ title, options, selected, onSelect, onClose }) {
                 height="16"
                 viewBox="0 0 24 24"
                 fill="none"
-                stroke="#22d3ee"
+                stroke="currentColor"
                 strokeWidth="4"
               >
                 <polyline points="20 6 9 17 4 12" />
@@ -735,56 +989,85 @@ function SimpleDropdown({ title, options, selected, onSelect, onClose }) {
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Main Component Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 export default function ImageStudio({
   apiKey,
+  muapiKey,
+  runwareApiKey = "",
+  cloudProvider = "muapi",
+  routingPrefs,
   onGenerationComplete,
   historyItems,
   droppedFiles,
   onFilesHandled,
+  onOpenApiSettings,
 }) {
   const PERSIST_KEY = "hg_image_studio_persistent";
-
-  // ── Model / mode state ──────────────────────────────────────────────────
-  const [imageMode, setImageMode] = useState(false); // false=t2i, true=i2i
-  const [selectedModelId, setSelectedModelId] = useState(t2iModels[0].id);
-  const [selectedModelName, setSelectedModelName] = useState(t2iModels[0].name);
-  const [selectedAr, setSelectedAr] = useState(
-    t2iModels[0].inputs?.aspect_ratio?.default || "1:1",
-  );
-  const [selectedQuality, setSelectedQuality] = useState(() => {
-    const resolutions = getResolutionsForModel(t2iModels[0].id);
-    return resolutions[0] || null;
+  const baseRouting = buildRoutingContext({
+    apiKey,
+    muapiKey: muapiKey ?? apiKey,
+    runwareApiKey,
+    routingPrefs,
   });
+  const defaultResolved = useMemo(
+    () => resolveProviderForOp("image", "imageT2i", baseRouting),
+    [
+      baseRouting.routingMode,
+      baseRouting.muapiKey,
+      baseRouting.runwareApiKey,
+      baseRouting.allowMuapiFallback,
+      routingPrefs?.perStudioRouting,
+    ],
+  );
+  const defaultProviderId = defaultResolved.providerId;
+
+  const [imageMode, setImageMode] = useState(false); // false=t2i, true=i2i
+  const [selectedModelProvider, setSelectedModelProvider] = useState(defaultProviderId);
+  const [selectedModelId, setSelectedModelId] = useState("");
+  const [selectedModelName, setSelectedModelName] = useState("");
+  const [selectedAr, setSelectedAr] = useState("1:1");
+  const [selectedQuality, setSelectedQuality] = useState(null);
+  const [selectedResolutionTier, setSelectedResolutionTier] = useState(null);
   const [selectedEffect, setSelectedEffect] = useState("");
   const [maxImages, setMaxImages] = useState(1);
 
-  // ── Prompt / upload state ───────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Prompt / upload state Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const [prompt, setPrompt] = useState("");
   const [uploadedImageUrls, setUploadedImageUrls] = useState([]);
 
-  // ── UI state ────────────────────────────────────────────────────────────
-  const [dropdownOpen, setDropdownOpen] = useState(null); // 'model' | 'ar' | 'quality' | null
+  // Ã¢â€â‚¬Ã¢â€â‚¬ UI state Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  const [dropdownOpen, setDropdownOpen] = useState(null); // 'model' | 'ar' | 'quality' | 'resolution' | null
   const [generating, setGenerating] = useState(false);
+  const [uploadPhase, setUploadPhase] = useState("");
   const [generateError, setGenerateError] = useState(null);
-  const [fullscreenUrl, setFullscreenUrl] = useState(null);
+  const [lastChargedUsd, setLastChargedUsd] = useState(/** @type {number | null} */ (null));
+  const [detailEntry, setDetailEntry] = useState(/** @type {object | null} */ (null));
 
-  // ── Canvas / history state ──────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Canvas / history state Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const [currentImageUrl, setCurrentImageUrl] = useState(null);
   const [activeHistoryIdx, setActiveHistoryIdx] = useState(0);
   const [batchSize, setBatchSize] = useState(1);
-  const [localHistory, setLocalHistory] = useState([]); // [{id,url,prompt,model,aspect_ratio,timestamp}]
+  const [seedValue, setSeedValue] = useState(/** @type {number | null} */ (null));
+  const {
+    history: localHistory,
+    setHistory: setLocalHistory,
+    prependPending,
+    resolvePending,
+    failPending,
+    retryPending,
+  } = useOptimisticGenerationHistory([]);
 
-  // Use prop history if provided, otherwise local
+  const [extraControls, setExtraControls] = useState(/** @type {Record<string, unknown>} */ ({}));
+  const [recreateRefWarning, setRecreateRefWarning] = useState(null);
+
   const history = historyItems ?? localHistory;
 
-  // ── Refs ────────────────────────────────────────────────────────────────
-  const textareaRef = useRef(null);
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Refs Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const dropdownRef = useRef(null);
-  const uploadPickerResetRef = useRef(null); // not used directly — managed via key
+  const uploadPickerResetRef = useRef(null); // not used directly Ã¢â‚¬â€ managed via key
 
-  // ── Close dropdown on outside click ─────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Close dropdown on outside click Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   useEffect(() => {
     if (!dropdownOpen) return;
     const handler = (e) => {
@@ -796,38 +1079,230 @@ export default function ImageStudio({
     return () => window.removeEventListener("click", handler);
   }, [dropdownOpen]);
 
-  // ── Persistence: Load ────────────────────────────────────────────────────
+  const applyDefaultT2iSelection = useCallback(
+    (provider) => {
+      const models = getT2iModelsForProvider(provider);
+      const first = models[0];
+      if (!first) return;
+      const ars = getAspectRatiosForT2iModel(first.id, provider);
+      const hasQ = modelHasT2iQualityInput(first.id, provider);
+      const hasR = modelHasT2iResolutionInput(first.id, provider);
+      const qualityOpts = hasQ ? getQualityEnumOptionsForT2iModel(first.id, provider) : [];
+      const resOpts = hasR ? getResolutionTierOptionsForT2iModel(first.id, provider) : getResolutionsForT2iModel(first.id, provider);
+      const qualityDefault = hasQ
+        ? getModelInputDefault(first.id, 'quality', provider, 't2i')
+        : null;
+      const resDefault = hasR
+        ? getModelInputDefault(first.id, 'resolution', provider, 't2i')
+        : getModelInputDefault(
+            first.id,
+            getQualityFieldForT2iModel(first.id, provider) || 'resolution',
+            provider,
+            't2i',
+          );
+      setImageMode(false);
+      setSelectedModelProvider(provider);
+      setSelectedModelId(first.id);
+      setSelectedModelName(first.name);
+      setSelectedAr(getModelInputDefault(first.id, 'aspect_ratio', provider, 't2i') || ars[0] || "1:1");
+      setSelectedQuality(
+        hasQ
+          ? clampModelInputSelection(null, qualityOpts, qualityDefault || qualityOpts[0] || null)
+          : hasR
+            ? null
+            : resDefault || resOpts[0] || null,
+      );
+      setSelectedResolutionTier(
+        hasR ? clampModelInputSelection(null, resOpts, resDefault || resOpts[0] || null) : null,
+      );
+      setSelectedEffect("");
+      setMaxImages(1);
+      setUploadedImageUrls([]);
+      saveModelPick("image", { v: 1, modelId: first.id, providerId: provider });
+    },
+    [],
+  );
+
+  const providerSwitchReady = useRef(false);
+  const prevRoutingPrefsKeyRef = useRef(/** @type {string | null} */ (null));
+  const routingPrefsKey = JSON.stringify(routingPrefs || {});
+
+  const modelSections = useMemo(() => {
+    const sections = getUnifiedModelSections("image", {
+      routingMode: baseRouting.routingMode,
+      allowMuapiFallback: baseRouting.allowMuapiFallback,
+      muapiKey: baseRouting.muapiKey,
+      runwareApiKey: baseRouting.runwareApiKey,
+      catalogMode: imageMode ? "i2i" : "t2i",
+    });
+    return sections;
+  }, [
+      baseRouting.routingMode,
+      baseRouting.allowMuapiFallback,
+      baseRouting.muapiKey,
+      baseRouting.runwareApiKey,
+      imageMode,
+      routingPrefsKey,
+    ],
+  );
+
+  const generationRouting = useMemo(
+    () =>
+      buildRoutingContext({
+        apiKey,
+        muapiKey: muapiKey ?? apiKey,
+        runwareApiKey,
+        routingPrefs,
+        providerOverride: imageMode ? undefined : selectedModelProvider,
+      }),
+    [
+      apiKey,
+      muapiKey,
+      runwareApiKey,
+      routingPrefsKey,
+      selectedModelProvider,
+      imageMode,
+    ],
+  );
+
+  const genResolved = useMemo(
+    () =>
+      resolveProviderForOp(
+        "image",
+        imageMode ? "imageI2i" : "imageT2i",
+        generationRouting,
+      ),
+    [generationRouting, imageMode],
+  );
+
+  const catalogProvider = selectedModelProvider || defaultProviderId;
+
+  const uploadAvail = useMemo(
+    () => getStudioOpAvailability("image", "upload", baseRouting),
+    [
+      baseRouting.routingMode,
+      baseRouting.muapiKey,
+      baseRouting.runwareApiKey,
+      baseRouting.allowMuapiFallback,
+      routingPrefsKey,
+    ],
+  );
+
+  const i2iAvail = useMemo(
+    () => getStudioOpAvailability("image", "imageI2i", generationRouting),
+    [generationRouting],
+  );
+
+  const providerPreviewLabel = genResolved.blockReason
+    ? genResolved.blockReason === "missing_key"
+      ? "Add the required API key in API Settings"
+      : "Not available on the selected provider"
+    : `Will run via ${providerDisplayLabel(genResolved.providerId)}${genResolved.usedFallback ? " (fallback)" : ""}`;
+
+  const imageGenOp = imageMode ? "imageI2i" : "imageT2i";
+  const imageCatalogMode = imageMode ? "i2i" : "t2i";
+  const showSeedUi = modelSupportsSeed(selectedModelId, catalogProvider, imageCatalogMode);
+
+  // Reset selection only when routing prefs change — not on first hydrate after persist load
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(PERSIST_KEY);
-      if (stored) {
-        const data = JSON.parse(stored);
-        if (data.imageMode !== undefined) setImageMode(data.imageMode);
-        if (data.selectedModelId) setSelectedModelId(data.selectedModelId);
-        if (data.selectedModelName) setSelectedModelName(data.selectedModelName);
-        if (data.selectedAr) setSelectedAr(data.selectedAr);
-        if (data.selectedQuality) setSelectedQuality(data.selectedQuality);
-        if (data.selectedEffect) setSelectedEffect(data.selectedEffect);
-        if (data.maxImages) setMaxImages(data.maxImages);
-        if (data.prompt) setPrompt(data.prompt);
-        if (data.uploadedImageUrls) setUploadedImageUrls(data.uploadedImageUrls);
-        if (data.batchSize) setBatchSize(data.batchSize);
-        if (data.localHistory) setLocalHistory(data.localHistory);
-      }
-    } catch (err) {
-      console.warn("Failed to load ImageStudio persistence:", err);
+    if (!providerSwitchReady.current) return;
+    if (prevRoutingPrefsKeyRef.current === null) {
+      prevRoutingPrefsKeyRef.current = routingPrefsKey;
+      return;
     }
-  }, []);
+    if (prevRoutingPrefsKeyRef.current === routingPrefsKey) return;
+    prevRoutingPrefsKeyRef.current = routingPrefsKey;
+    applyDefaultT2iSelection(defaultProviderId);
+  }, [routingPrefsKey, defaultProviderId, applyDefaultT2iSelection]);
 
-  // ── Adjust height on load ────────────────────────────────────────────────
+  // Persistence load — deferred so first paint stays interactive (H2: sync getItem/parse froze tab)
   useEffect(() => {
-    const timer = setTimeout(() => {
-      handleTextareaInput();
-    }, 150);
-    return () => clearTimeout(timer);
+    providerSwitchReady.current = true;
+    let cancelled = false;
+    const hydrate = () => {
+      if (cancelled) return;
+      try {
+        const stored = localStorage.getItem(PERSIST_KEY);
+        if (stored) {
+          if (stored.length > STUDIO_PERSIST_MAX_BYTES) {
+            console.warn("[ImageStudio] Persist too large; cleared.", stored.length);
+            localStorage.removeItem(PERSIST_KEY);
+          } else {
+            const data = JSON.parse(stored);
+            if (data.imageMode !== undefined) setImageMode(!!data.imageMode);
+            if (data.prompt) setPrompt(data.prompt);
+            if (data.batchSize) setBatchSize(data.batchSize);
+            if (data.seedValue != null) setSeedValue(data.seedValue);
+            if (data.localHistory) {
+              setLocalHistory(
+                Array.isArray(data.localHistory)
+                  ? data.localHistory.slice(0, 20)
+                  : data.localHistory,
+              );
+            }
+            if (data.uploadedImageUrls) {
+              setUploadedImageUrls(data.uploadedImageUrls);
+            }
+            const pick = loadModelPick("image");
+            const pickProvider = pick?.providerId || defaultProviderId;
+            const pickModel =
+              pick && getModelByIdForStudio(pick.modelId, "image", pickProvider);
+            if (pickModel) {
+              setSelectedModelProvider(pickProvider);
+              setSelectedModelId(pick.modelId);
+              setSelectedModelName(pickModel.name || pick.modelId);
+              if (data.selectedAr) setSelectedAr(data.selectedAr);
+              if (data.selectedQuality) setSelectedQuality(data.selectedQuality);
+              if (data.selectedResolutionTier) {
+                setSelectedResolutionTier(data.selectedResolutionTier);
+              }
+              if (data.selectedEffect) setSelectedEffect(data.selectedEffect);
+              if (data.maxImages) setMaxImages(data.maxImages);
+            } else if (
+              data.selectedModelId &&
+              getModelByIdForStudio(data.selectedModelId, "image", pickProvider)
+            ) {
+              setSelectedModelProvider(pickProvider);
+              setSelectedModelId(data.selectedModelId);
+              if (data.selectedModelName) setSelectedModelName(data.selectedModelName);
+              if (data.selectedAr) setSelectedAr(data.selectedAr);
+              if (data.selectedQuality) setSelectedQuality(data.selectedQuality);
+              if (data.selectedResolutionTier) {
+                setSelectedResolutionTier(data.selectedResolutionTier);
+              }
+              if (data.selectedEffect) setSelectedEffect(data.selectedEffect);
+              if (data.maxImages) setMaxImages(data.maxImages);
+            }
+          }
+        } else {
+          const pick = loadModelPick("image");
+          if (pick && getModelByIdForStudio(pick.modelId, "image", pick.providerId)) {
+            const m = getModelByIdForStudio(pick.modelId, "image", pick.providerId);
+            setSelectedModelProvider(pick.providerId);
+            setSelectedModelId(pick.modelId);
+            setSelectedModelName(m.name || pick.modelId);
+          } else {
+            applyDefaultT2iSelection(defaultProviderId);
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to load ImageStudio persistence:", err);
+        try {
+          localStorage.removeItem(PERSIST_KEY);
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+    const id = setTimeout(hydrate, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(id);
+    };
   }, []);
 
-  // ── Persistence: Save ────────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Adjust height on load Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Persistence: Save Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   useEffect(() => {
     const timer = setTimeout(() => {
       try {
@@ -837,18 +1312,35 @@ export default function ImageStudio({
           selectedModelName,
           selectedAr,
           selectedQuality,
+          selectedResolutionTier,
           selectedEffect,
           maxImages,
           prompt,
           uploadedImageUrls,
           batchSize,
-          localHistory,
+          seedValue,
+          localHistory: localHistory
+            .filter((e) => e.status === "ready" && e.url)
+            .slice(0, 20)
+            .map((e) => ({
+              status: e.status,
+              id: e.id,
+              url: e.url,
+              prompt: e.prompt ? String(e.prompt).slice(0, 500) : undefined,
+              model: e.model,
+              providerId: e.providerId,
+              aspect_ratio: e.aspect_ratio,
+              snapshot: e.snapshot,
+            })),
         };
-        localStorage.setItem(PERSIST_KEY, JSON.stringify(state));
+        const json = JSON.stringify(state);
+        if (json.length <= STUDIO_PERSIST_MAX_BYTES) {
+          localStorage.setItem(PERSIST_KEY, json);
+        }
       } catch (err) {
         console.warn("Failed to save ImageStudio persistence:", err);
       }
-    }, 500); // 500ms debounce
+    }, 500);
     return () => clearTimeout(timer);
   }, [
     imageMode,
@@ -856,15 +1348,41 @@ export default function ImageStudio({
     selectedModelName,
     selectedAr,
     selectedQuality,
+    selectedResolutionTier,
     selectedEffect,
     maxImages,
     prompt,
     uploadedImageUrls,
     batchSize,
+    seedValue,
     localHistory,
   ]);
 
+  useEffect(() => {
+    if (!uploadedImageUrls.length) return undefined;
+    const timer = setTimeout(() => {
+      try {
+        const stored = localStorage.getItem(PERSIST_KEY);
+        const prev = stored ? JSON.parse(stored) : {};
+        const assetManifest = assetsToManifest(
+          uploadedImageUrls.map((l) => getStudioAsset("image", l)).filter(Boolean),
+        );
+        localStorage.setItem(
+          PERSIST_KEY,
+          JSON.stringify({ ...prev, assetManifest }),
+        );
+      } catch (err) {
+        console.warn("Failed to save ImageStudio asset manifest:", err);
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [uploadedImageUrls]);
+
   const processDroppedImages = async (files) => {
+    if (!uploadAvail.canRun) {
+      alert(uploadAvail.message);
+      return;
+    }
     const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
     const tooLarge = files.filter((f) => f.size > MAX_IMAGE_SIZE);
     if (tooLarge.length > 0) {
@@ -881,7 +1399,8 @@ export default function ImageStudio({
       const urls = await Promise.all(
         toUpload.map(async (file) => {
           try {
-            return await uploadFile(apiKey, file);
+            const asset = await stageFileForStudio("image", file);
+            return asset.label;
           } catch (err) {
             console.error(
               "[ImageStudio] Drop upload failed for",
@@ -901,7 +1420,7 @@ export default function ImageStudio({
     }
   };
 
-  // ── Handle Dropped Files ────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Handle Dropped Files Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   useEffect(() => {
     if (droppedFiles && droppedFiles.length > 0) {
       const imageFiles = droppedFiles.filter(f => f.type.startsWith('image/'));
@@ -912,129 +1431,451 @@ export default function ImageStudio({
     }
   }, [droppedFiles, onFilesHandled, processDroppedImages]);
 
-  // ── Derived: current model lists & helpers ───────────────────────────────
-  const currentModels = imageMode ? i2iModels : t2iModels;
+  const t2iKeyMissing =
+    genResolved.blockReason === "missing_key" && genResolved.providerId === "runware";
+
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Derived: current model lists & helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  const currentModels = imageMode ? flattenModelSections(modelSections) : [];
   const currentAspectRatios = imageMode
-    ? getAspectRatiosForI2IModel(selectedModelId)
-    : getAspectRatiosForModel(selectedModelId);
-  const currentResolutions = imageMode
-    ? getResolutionsForI2IModel(selectedModelId)
-    : getResolutionsForModel(selectedModelId);
+    ? getAspectRatiosForI2iModel(selectedModelId, catalogProvider)
+    : getAspectRatiosForT2iModel(selectedModelId, catalogProvider);
+  const hasT2iQualityInput =
+    !imageMode && modelHasT2iQualityInput(selectedModelId, catalogProvider);
+  const hasT2iResolutionInput =
+    !imageMode && modelHasT2iResolutionInput(selectedModelId, catalogProvider);
+  const resolutionOptionsResolved = getModelInputOptionsForField(
+    selectedModelId,
+    "resolution",
+    catalogProvider,
+    imageCatalogMode,
+  );
+  const useTierResolutionUi = isTierResolutionOptions(resolutionOptionsResolved);
+  const qualityEnumOptions = hasT2iQualityInput
+    ? getQualityEnumOptionsForT2iModel(selectedModelId, catalogProvider)
+    : [];
+  const resolutionTierOptions = useTierResolutionUi
+    ? resolutionOptionsResolved
+    : hasT2iResolutionInput
+      ? getResolutionTierOptionsForT2iModel(selectedModelId, catalogProvider)
+      : imageMode
+        ? resolutionOptionsResolved
+        : [];
+  const currentQualityOptions = imageMode
+    ? useTierResolutionUi
+      ? []
+      : getResolutionsForI2iModel(selectedModelId, catalogProvider)
+    : hasT2iQualityInput || useTierResolutionUi
+      ? []
+      : getQualityOptionsForT2iModel(selectedModelId, catalogProvider);
   const currentQualityField = imageMode
-    ? getQualityFieldForI2IModel(selectedModelId)
-    : getQualityFieldForModel(selectedModelId);
-  const showQualityBtn = currentResolutions.length > 0;
-  const currentEffects = imageMode ? getEffectsForI2IModel(selectedModelId) : [];
+    ? getQualityFieldForI2iModel(selectedModelId, catalogProvider)
+    : getQualityFieldForT2iModel(selectedModelId, catalogProvider);
+  const showQualityChip = qualityEnumOptions.length > 0;
+  const showResolutionChip =
+    useTierResolutionUi ||
+    resolutionTierOptions.length > 0 ||
+    (!hasT2iQualityInput && currentQualityOptions.length > 0);
+  const showLegacySingleChip =
+    !imageMode && !showQualityChip && !useTierResolutionUi && !hasT2iResolutionInput && currentQualityOptions.length > 0;
+  const legacyResolutionOptions = showLegacySingleChip ? currentQualityOptions : resolutionTierOptions;
+  const currentEffects = imageMode
+    ? getEffectsForModelRegistry(selectedModelId, catalogProvider, 'i2i')
+    : [];
   const showEffectBtn = currentEffects.length > 0;
 
-  // ── Textarea auto-resize ─────────────────────────────────────────────────
-  const handleTextareaInput = () => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    const maxHeight = window.innerWidth < 768 ? 150 : 250;
-    el.style.height = Math.min(el.scrollHeight, maxHeight) + "px";
-  };
+  const costPayload = useMemo(() => {
+    const base = { model: selectedModelId, aspect_ratio: selectedAr };
+    if (showQualityChip && selectedQuality) base.quality = selectedQuality;
+    if (useTierResolutionUi && selectedResolutionTier) {
+      base.resolution = selectedResolutionTier;
+    } else if (hasT2iResolutionInput && selectedResolutionTier) {
+      base.resolution = selectedResolutionTier;
+    } else if (showLegacySingleChip && selectedQuality && currentQualityField) {
+      base[currentQualityField] = selectedQuality;
+    }
+    if (imageMode) {
+      return {
+        ...base,
+        images_list: uploadedImageUrls,
+        image_url: uploadedImageUrls[0],
+        ...(prompt.trim() ? { prompt: prompt.trim() } : {}),
+      };
+    }
+    return {
+      ...base,
+      prompt: prompt.trim(),
+    };
+  }, [
+    imageMode,
+    selectedModelId,
+    selectedAr,
+    prompt,
+    uploadedImageUrls,
+    showQualityChip,
+    selectedQuality,
+    useTierResolutionUi,
+    hasT2iResolutionInput,
+    selectedResolutionTier,
+    showLegacySingleChip,
+    currentQualityField,
+  ]);
 
-  // ── Upload picker callbacks ──────────────────────────────────────────────
+  const { unitCostUsd, source: costSource, isLoadingCost } = useStudioGenerationCost({
+    studioId: "image",
+    op: imageGenOp,
+    routing: generationRouting,
+    modelId: selectedModelId,
+    providerId: selectedModelProvider || catalogProvider,
+    catalogMode: imageCatalogMode,
+    payload: costPayload,
+    enabled: Boolean(selectedModelId) && !generating,
+  });
+
+  const mentionAssets = useMemo(
+    () => cardMentionAssets("image", uploadedImageUrls),
+    [uploadedImageUrls],
+  );
+
+  const cardLabels = useMemo(
+    () => extractCardLabels(uploadedImageUrls),
+    [uploadedImageUrls],
+  );
+
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Upload picker callbacks Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const handleUploadSelect = useCallback(
     ({ url, urls }) => {
       const newUrls = urls || [url];
       setUploadedImageUrls(newUrls);
 
-      if (!imageMode) {
+      if (!imageMode && i2iAvail.canRun) {
         const firstI2I = i2iModels[0];
-        const ars = getAspectRatiosForI2IModel(firstI2I.id);
-        const resolutions = getResolutionsForI2IModel(firstI2I.id);
-        const effects = getEffectsForI2IModel(firstI2I.id);
+        const ars = getAspectRatiosForI2iModel(firstI2I.id, defaultProviderId);
+        const resolutions = getResolutionsForI2iModel(firstI2I.id, defaultProviderId);
+        const effects = getEffectsForModelRegistry(firstI2I.id, defaultProviderId, 'i2i');
         setImageMode(true);
         setSelectedModelId(firstI2I.id);
         setSelectedModelName(firstI2I.name);
-        setSelectedAr(ars[0] || "1:1");
+        setSelectedAr(getModelInputDefault(firstI2I.id, 'aspect_ratio', defaultProviderId, 'i2i') || ars[0] || "1:1");
         setSelectedQuality(resolutions[0] || null);
-        setSelectedEffect(effects.length > 0 ? (getDefaultEffectForI2IModel(firstI2I.id) || effects[0]) : "");
-        setMaxImages(getMaxImagesForI2IModel(firstI2I.id));
+        setSelectedEffect(effects.length > 0 ? (getDefaultEffectForModelRegistry(firstI2I.id, defaultProviderId, 'i2i') || effects[0]) : "");
+        setMaxImages(getMaxImagesForI2IModel(firstI2I.id, defaultProviderId));
       }
     },
-    [imageMode],
+    [imageMode, i2iAvail.canRun],
   );
 
   const handleUploadClear = useCallback(() => {
     setUploadedImageUrls([]);
-    setImageMode(false);
-    const firstT2I = t2iModels[0];
-    const ars = getAspectRatiosForModel(firstT2I.id);
-    const resolutions = getResolutionsForModel(firstT2I.id);
-    setSelectedModelId(firstT2I.id);
-    setSelectedModelName(firstT2I.name);
-    setSelectedAr(ars[0] || "1:1");
-    setSelectedQuality(resolutions[0] || null);
-    setSelectedEffect("");
-    setMaxImages(1);
-  }, []);
+    clearStudioRegistry("image");
+    applyDefaultT2iSelection(defaultProviderId);
+  }, [applyDefaultT2iSelection, defaultProviderId]);
 
-  // ── Model selection ──────────────────────────────────────────────────────
-  const handleModelSelect = (m) => {
+  const handleModelSelect = (m, providerId = "muapi") => {
+    const mode = imageMode ? 'i2i' : 't2i';
     const ars = imageMode
-      ? getAspectRatiosForI2IModel(m.id)
-      : getAspectRatiosForModel(m.id);
-    const resolutions = imageMode
-      ? getResolutionsForI2IModel(m.id)
-      : getResolutionsForModel(m.id);
+      ? getAspectRatiosForI2iModel(m.id, providerId)
+      : getAspectRatiosForT2iModel(m.id, providerId);
+    const hasQ = !imageMode && modelHasT2iQualityInput(m.id, providerId);
+    const hasR = !imageMode && modelHasT2iResolutionInput(m.id, providerId);
+    const qualityOpts = hasQ ? getQualityEnumOptionsForT2iModel(m.id, providerId) : [];
+    const resOpts = hasR
+      ? getResolutionTierOptionsForT2iModel(m.id, providerId)
+      : imageMode
+        ? getResolutionsForI2iModel(m.id, providerId)
+        : getResolutionsForT2iModel(m.id, providerId);
+    const qualityField = imageMode
+      ? getQualityFieldForI2iModel(m.id, providerId)
+      : getQualityFieldForT2iModel(m.id, providerId);
+    const qualityDefault = hasQ
+      ? getModelInputDefault(m.id, 'quality', providerId, mode)
+      : qualityField
+        ? getModelInputDefault(m.id, qualityField, providerId, mode)
+        : null;
+    const resDefault = hasR
+      ? getModelInputDefault(m.id, 'resolution', providerId, mode)
+      : qualityDefault;
+    if (!imageMode) {
+      setSelectedModelProvider(providerId);
+      saveModelPick("image", { v: 1, modelId: m.id, providerId });
+    } else {
+      setSelectedModelProvider(providerId);
+      saveModelPick("image", { v: 1, modelId: m.id, providerId, catalogMode: "i2i" });
+    }
     setSelectedModelId(m.id);
     setSelectedModelName(m.name);
-    setSelectedAr(ars[0] || "1:1");
-    setSelectedQuality(resolutions[0] || null);
+    setSelectedAr(clampModelInputSelection(selectedAr, ars, getModelInputDefault(m.id, 'aspect_ratio', providerId, mode) || ars[0] || "1:1"));
+    if (hasQ) {
+      setSelectedQuality(
+        clampModelInputSelection(
+          selectedQuality === 'auto' ? null : selectedQuality,
+          qualityOpts,
+          qualityDefault || qualityOpts[0] || null,
+        ),
+      );
+    } else if (!hasR) {
+      setSelectedQuality(
+        clampModelInputSelection(selectedQuality, resOpts, resDefault || resOpts[0] || null),
+      );
+    } else {
+      setSelectedQuality(null);
+    }
+    setSelectedResolutionTier(
+      hasR
+        ? clampModelInputSelection(selectedResolutionTier, resOpts, resDefault || resOpts[0] || null)
+        : null,
+    );
     if (imageMode) {
-      setMaxImages(getMaxImagesForI2IModel(m.id));
-      const effects = getEffectsForI2IModel(m.id);
-      setSelectedEffect(effects.length > 0 ? (getDefaultEffectForI2IModel(m.id) || effects[0]) : "");
+      setMaxImages(getMaxImagesForI2IModel(m.id, providerId));
+      const effects = getEffectsForModelRegistry(m.id, providerId, 'i2i');
+      setSelectedEffect(effects.length > 0 ? (getDefaultEffectForModelRegistry(m.id, providerId, 'i2i') || effects[0]) : "");
     } else {
       setSelectedEffect("");
     }
   };
 
-  // ── History helpers ──────────────────────────────────────────────────────
-  const addToHistory = useCallback(
-    (entry) => {
-      if (!historyItems) {
-        setLocalHistory((prev) => [entry, ...prev.slice(0, 49)]);
-      }
-      setActiveHistoryIdx(0);
-      setCurrentImageUrl(entry.url);
-    },
-    [historyItems],
+  // Ã¢â€â‚¬Ã¢â€â‚¬ History helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  const buildImageSnapshot = useCallback(
+    () =>
+      buildGenerationSnapshot({
+        studioId: "image",
+        catalogMode: imageCatalogMode,
+        modelId: selectedModelId,
+        providerId: catalogProvider,
+        prompt: prompt.trim(),
+        controls: {
+          aspect_ratio: selectedAr,
+          ...(showQualityChip && selectedQuality ? { quality: selectedQuality } : {}),
+          ...(useTierResolutionUi && selectedResolutionTier
+            ? { resolution: selectedResolutionTier }
+            : selectedQuality && currentQualityField
+              ? { [currentQualityField]: selectedQuality }
+              : {}),
+          ...extraControls,
+          ...(seedForSnapshot(seedValue) != null ? { seed: seedForSnapshot(seedValue) } : {}),
+        },
+        assetLabels: cardLabels,
+        assetManifest: manifestFromAssetLabels("image", cardLabels),
+        imageMode,
+        batchSize,
+      }),
+    [
+      imageCatalogMode,
+      selectedModelId,
+      catalogProvider,
+      prompt,
+      selectedAr,
+      showQualityChip,
+      selectedQuality,
+      useTierResolutionUi,
+      selectedResolutionTier,
+      currentQualityField,
+      extraControls,
+      cardLabels,
+      imageMode,
+      batchSize,
+      seedValue,
+    ],
   );
 
-  // ── View state ─────────────────────────────────────
+  const runGenerationFromSnapshot = useCallback(
+    async (snap, pendingId) => {
+      const slotImageMode = !!snap.imageMode;
+      const apiPrompt = stripMentionsFromPrompt(snap.prompt || "");
+      const ctrl = snap.controls || {};
+      const slotSeed = ctrl.seed;
+      const labels = snap.assetLabels?.length ? snap.assetLabels : [];
+      const routing = {
+        ...generationRouting,
+        providerOverride: snap.providerId,
+      };
+      const refUrls =
+        slotImageMode && labels.length
+          ? labels
+              .map((label) => {
+                const a = getStudioAsset("image", label);
+                return a?.inferenceRef || label;
+              })
+              .filter(Boolean)
+          : uploadedImageUrls;
+
+      if (slotImageMode) {
+        if (!refUrls.length) {
+          failPending(pendingId, CONTROL_STRINGS.refsMissingRecreate);
+          return null;
+        }
+        const genParams = {
+          model: snap.modelId,
+          images_list: refUrls,
+          image_url: refUrls[0],
+          aspect_ratio: ctrl.aspect_ratio,
+          prompt: apiPrompt,
+          ...Object.fromEntries(
+            Object.entries(ctrl).filter(
+              ([k]) => !["aspect_ratio", "quality", "resolution", "seed"].includes(k),
+            ),
+          ),
+        };
+        if (ctrl.quality) genParams.quality = ctrl.quality;
+        if (ctrl.resolution) genParams.resolution = ctrl.resolution;
+        applySeedToParams(genParams, slotSeed, snap.modelId, snap.providerId, snap.catalogMode);
+        const res = await generateI2IForStudio(routing, genParams, {
+          imageLabels: refUrls,
+          cardLabels: labels,
+        });
+        if (res?.url) {
+          const manifest = snap.assetManifest?.length
+            ? snap.assetManifest
+            : manifestFromAssetLabels("image", labels);
+          resolvePending(pendingId, {
+            id: res.id || pendingId,
+            url: res.url,
+            providerId: res._providerId || snap.providerId,
+            snapshot: snapshotWithCardSeed(
+              { ...snap, assetManifest: manifest, assetLabels: labels },
+              usedSeedFromResponse(slotSeed, res),
+            ),
+          });
+        } else {
+          failPending(pendingId, "No image URL returned");
+        }
+        return res;
+      }
+
+      const genParams = {
+        model: snap.modelId,
+        prompt: apiPrompt,
+        aspect_ratio: ctrl.aspect_ratio,
+        ...Object.fromEntries(
+          Object.entries(ctrl).filter(
+            ([k]) => !["aspect_ratio", "quality", "resolution", "seed"].includes(k),
+          ),
+        ),
+      };
+      if (ctrl.quality) genParams.quality = ctrl.quality;
+      if (ctrl.resolution) genParams.resolution = ctrl.resolution;
+      applySeedToParams(genParams, slotSeed, snap.modelId, snap.providerId, snap.catalogMode);
+      const res = await generateImageForStudio(routing, genParams);
+      if (res?.url) {
+        const manifest = snap.assetManifest?.length
+          ? snap.assetManifest
+          : manifestFromAssetLabels("image", labels);
+        resolvePending(pendingId, {
+          id: res.id || pendingId,
+          url: res.url,
+          providerId: res._providerId || snap.providerId,
+          snapshot: snapshotWithCardSeed(
+            { ...snap, assetManifest: manifest, assetLabels: labels },
+            usedSeedFromResponse(slotSeed, res),
+          ),
+        });
+      } else {
+        failPending(pendingId, "No image URL returned");
+      }
+      return res;
+    },
+    [generationRouting, uploadedImageUrls, failPending, resolvePending],
+  );
+
+  const handleRetryEntry = useCallback(
+    async (entry) => {
+      const snap = entry?.snapshot;
+      if (!snap?.modelId || generating) return;
+      retryPending(entry.id);
+      setGenerating(true);
+      setGenerateError(null);
+      try {
+        await runGenerationFromSnapshot(snap, entry.id);
+      } catch (e) {
+        failPending(entry.id, e?.message || "Generation failed");
+        setGenerateError(formatRunwareErrorForStudio(e));
+        setTimeout(() => setGenerateError(null), 6000);
+      } finally {
+        setGenerating(false);
+      }
+    },
+    [generating, retryPending, runGenerationFromSnapshot, failPending],
+  );
+
+  useEffect(() => {
+    return subscribeStudioRetry((detail) => {
+      if (detail.snapshot?.studioId !== "image" || !detail.pendingId) return;
+      void handleRetryEntry({ id: detail.pendingId, snapshot: detail.snapshot });
+    });
+  }, [handleRetryEntry]);
+
+  useEffect(() => {
+    return subscribeStudioRecreate((snap) => {
+      if (snap.studioId !== "image") return;
+      setRecreateRefWarning(null);
+      setImageMode(!!snap.imageMode);
+      setSelectedModelProvider(snap.providerId);
+      setSelectedModelId(snap.modelId);
+      const m = getModelByIdForStudio(snap.modelId, "image", snap.providerId, {
+        catalogMode: snap.catalogMode,
+      });
+      if (m?.name) setSelectedModelName(m.name);
+      if (snap.controls?.aspect_ratio) setSelectedAr(String(snap.controls.aspect_ratio));
+      if (snap.controls?.quality) setSelectedQuality(snap.controls.quality);
+      if (snap.controls?.resolution) setSelectedResolutionTier(snap.controls.resolution);
+      if (snap.controls?.seed != null && Number.isFinite(Number(snap.controls.seed))) {
+        setSeedValue(Number(snap.controls.seed));
+      } else {
+        setSeedValue(null);
+      }
+      setExtraControls(
+        Object.fromEntries(
+          Object.entries(snap.controls || {}).filter(
+            ([k]) => !["aspect_ratio", "quality", "resolution", "seed"].includes(k),
+          ),
+        ),
+      );
+      setPrompt(snap.prompt || "");
+      if (snap.batchSize) setBatchSize(snap.batchSize);
+      void restoreAssetsForRecreate("image", snap).then(({ restored, missing }) => {
+        setUploadedImageUrls(restored);
+        if (missing.length > 0) {
+          setRecreateRefWarning(CONTROL_STRINGS.refsMissingRecreate);
+        }
+      });
+    });
+  }, []);
+
+  // Ã¢â€â‚¬Ã¢â€â‚¬ View state Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
   const resetToPrompt = () => {
     setCurrentImageUrl(null);
     setPrompt("");
-    setUploadedImageUrls([]);
-    setImageMode(false);
-    const firstT2I = t2iModels[0];
-    const ars = getAspectRatiosForModel(firstT2I.id);
-    const resolutions = getResolutionsForModel(firstT2I.id);
-    setSelectedModelId(firstT2I.id);
-    setSelectedModelName(firstT2I.name);
-    setSelectedAr(ars[0] || "1:1");
-    setSelectedQuality(resolutions[0] || null);
-    setSelectedEffect("");
-    setMaxImages(1);
+    applyDefaultT2iSelection(defaultProviderId);
   };
 
-  // ── Generation ───────────────────────────────────────────────────────────
   const handleGenerate = async () => {
     if (generating) return;
 
+    if (t2iKeyMissing) {
+      setGenerateError(providerPreviewLabel);
+      setTimeout(() => setGenerateError(null), 4000);
+      return;
+    }
+
+    const trimmedPrompt = prompt.trim();
+    const apiPrompt = stripMentionsFromPrompt(trimmedPrompt);
+
     if (imageMode) {
+      if (!i2iAvail.canRun) {
+        setGenerateError(i2iAvail.message);
+        setTimeout(() => setGenerateError(null), 4000);
+        return;
+      }
       if (uploadedImageUrls.length === 0) {
         alert("Please upload a reference image first.");
         return;
       }
+      if (!apiPrompt) {
+        alert("Please describe the edit you want (text besides @mentions).");
+        return;
+      }
     } else {
-      if (!prompt.trim()) {
+      if (!apiPrompt) {
         alert("Please enter a prompt to generate an image.");
         return;
       }
@@ -1042,48 +1883,129 @@ export default function ImageStudio({
 
     setGenerating(true);
     setGenerateError(null);
+    setUploadPhase("");
+
+    const snapshot = buildImageSnapshot();
+    const batchSeeds = seedsForBatch(seedValue, batchSize);
+    const pendingIds = Array.from({ length: batchSize }, (_, index) =>
+      prependPending({
+        prompt: prompt.trim(),
+        model: selectedModelId,
+        aspect_ratio: selectedAr,
+        resolution: selectedResolutionTier || selectedQuality,
+        providerId: catalogProvider,
+        snapshot: snapshotWithCardSeed(snapshot, batchSeeds[index]),
+        mediaType: "image",
+      }),
+    );
 
     try {
       const results = await Promise.all(
-        Array.from({ length: batchSize }).map(async () => {
-          if (imageMode) {
+        pendingIds.map(async (pendingId, index) => {
+          try {
+            if (imageMode) {
+              const genParams = {
+                model: selectedModelId,
+                images_list: uploadedImageUrls,
+                image_url: uploadedImageUrls[0],
+                aspect_ratio: selectedAr,
+                ...extraControls,
+              };
+              genParams.prompt = apiPrompt;
+              if (showQualityChip && selectedQuality) genParams.quality = selectedQuality;
+              if (useTierResolutionUi && selectedResolutionTier) {
+                genParams.resolution = selectedResolutionTier;
+              } else if (currentQualityField && selectedQuality) {
+                genParams[currentQualityField] = selectedQuality;
+              }
+              if (showEffectBtn && selectedEffect) genParams.name = selectedEffect;
+              applySeedToParams(
+                genParams,
+                batchSeeds[index],
+                selectedModelId,
+                catalogProvider,
+                imageCatalogMode,
+              );
+              const res = await generateI2IForStudio(generationRouting, genParams, {
+                imageLabels: uploadedImageUrls,
+                cardLabels,
+                onUploadProgress: (pct) => setUploadPhase(`Uploading assets… ${pct}%`),
+              });
+              if (res?.url) {
+                const finalizedManifest = manifestFromAssetLabels("image", cardLabels);
+                const cardSeed = usedSeedFromResponse(batchSeeds[index], res);
+                resolvePending(pendingId, {
+                  id: res.id || pendingId,
+                  url: res.url,
+                  providerId: res._providerId || genResolved.providerId,
+                  snapshot: snapshotWithCardSeed(
+                    {
+                      ...snapshot,
+                      assetManifest: finalizedManifest,
+                      assetLabels: cardLabels,
+                    },
+                    cardSeed,
+                  ),
+                });
+              } else {
+                failPending(pendingId, "No image URL returned");
+              }
+              return res;
+            }
             const genParams = {
               model: selectedModelId,
-              images_list: uploadedImageUrls,
-              image_url: uploadedImageUrls[0],
+              prompt: apiPrompt,
               aspect_ratio: selectedAr,
+              ...extraControls,
             };
-            if (prompt.trim()) genParams.prompt = prompt.trim();
-            if (currentQualityField && selectedQuality) {
+            if (showQualityChip && selectedQuality) genParams.quality = selectedQuality;
+            if (useTierResolutionUi && selectedResolutionTier) {
+              genParams.resolution = selectedResolutionTier;
+            } else if (showLegacySingleChip && currentQualityField && selectedQuality) {
               genParams[currentQualityField] = selectedQuality;
             }
-            if (showEffectBtn && selectedEffect) genParams.name = selectedEffect;
-            return await generateI2I(apiKey, genParams);
-          } else {
-            const genParams = {
-              model: selectedModelId,
-              prompt: prompt.trim(),
-              aspect_ratio: selectedAr,
-            };
-            if (currentQualityField && selectedQuality) {
-              genParams[currentQualityField] = selectedQuality;
+            applySeedToParams(
+              genParams,
+              batchSeeds[index],
+              selectedModelId,
+              catalogProvider,
+              imageCatalogMode,
+            );
+            const res = await generateImageForStudio(generationRouting, genParams);
+            if (res?.url) {
+              const finalizedManifest = manifestFromAssetLabels("image", cardLabels);
+              const cardSeed = usedSeedFromResponse(batchSeeds[index], res);
+              resolvePending(pendingId, {
+                id: res.id || pendingId,
+                url: res.url,
+                providerId: res._providerId || genResolved.providerId,
+                snapshot: snapshotWithCardSeed(
+                  {
+                    ...snapshot,
+                    assetManifest: finalizedManifest,
+                    assetLabels: cardLabels,
+                  },
+                  cardSeed,
+                ),
+              });
+            } else {
+              failPending(pendingId, "No image URL returned");
             }
-            return await generateImage(apiKey, genParams);
+            return res;
+          } catch (err) {
+            failPending(pendingId, err?.message || "Generation failed");
+            throw err;
           }
-        })
+        }),
       );
+
+      const firstCost = results.find((r) => r && typeof r.costUsd === "number")?.costUsd;
+      if (typeof firstCost === "number") setLastChargedUsd(firstCost);
 
       results.forEach((res) => {
         if (res && res.url) {
-          const entry = {
-            id: res.id || Math.random().toString(36).substring(7),
-            url: res.url,
-            prompt: prompt.trim(),
-            model: selectedModelId,
-            aspect_ratio: selectedAr,
-            timestamp: new Date().toISOString(),
-          };
-          addToHistory(entry);
+          setActiveHistoryIdx(0);
+          setCurrentImageUrl(res.url);
           onGenerationComplete?.({
             url: res.url,
             model: selectedModelId,
@@ -1092,10 +2014,15 @@ export default function ImageStudio({
           });
         }
       });
+      const lastRes = results.filter(Boolean).pop();
+      const lastSlotSeed = batchSeeds[batchSeeds.length - 1];
+      if (lastRes) {
+        setSeedValue(advanceSeed(usedSeedFromResponse(lastSlotSeed, lastRes)));
+      }
     } catch (e) {
       console.error("[ImageStudio] Generation failed:", e);
-      setGenerateError(e.message.slice(0, 80));
-      setTimeout(() => setGenerateError(null), 4000);
+      setGenerateError(formatRunwareErrorForStudio(e));
+      setTimeout(() => setGenerateError(null), 6000);
     } finally {
       setGenerating(false);
     }
@@ -1103,77 +2030,34 @@ export default function ImageStudio({
 
   const placeholderText =
     uploadedImageUrls.length > 1
-      ? `${uploadedImageUrls.length} images selected — describe the transformation (optional)`
+      ? `${uploadedImageUrls.length} images selected — describe the transformation; use @image1, @image2`
       : imageMode
-        ? "Describe how to transform this image (optional)"
+        ? "Describe how to transform this image (optional); use @image1 to reference uploads"
         : "Describe the image you want to create";
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Render Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   return (
     <div className="w-full h-full flex flex-col items-center justify-center bg-app-bg relative p-4 md:p-6 overflow-hidden">
       
-      {/* ── CENTRAL GALLERY AREA ── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ CENTRAL GALLERY AREA Ã¢â€â‚¬Ã¢â€â‚¬ */}
       <div className="flex-1 w-full max-w-7xl mx-auto overflow-y-auto custom-scrollbar pb-40 lg:pb-32 px-2">
         {history.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 w-full pt-4 animate-fade-in-up">
             {history.map((entry, idx) => (
-              <div
+              <GenerationHistoryCard
                 key={entry.id || idx}
-                className="relative group rounded-lg overflow-hidden border border-white/10 bg-[#0a0a0a] shadow-xl hover:border-primary/50 transition-all duration-300 flex flex-col"
-              >
-                <img
-                  src={entry.url}
-                  alt={entry.prompt?.substring(0, 30) || "Generated image"}
-                  className="w-full aspect-square object-cover bg-black/40 cursor-pointer hover:opacity-80 transition-opacity"
-                  onClick={() => setFullscreenUrl(entry.url)}
-                />
-                
-                {/* Overlay actions */}
-                <div className="absolute top-2 right-2 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    type="button"
-                    title="Fullscreen"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setFullscreenUrl(entry.url);
-                    }}
-                    className="p-2 bg-black/60 backdrop-blur-md rounded-full text-white hover:bg-primary hover:text-black transition-all border border-white/10"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <polyline points="15 3 21 3 21 9" />
-                      <polyline points="9 21 3 21 3 15" />
-                      <line x1="21" y1="3" x2="14" y2="10" />
-                      <line x1="3" y1="21" x2="10" y2="14" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    title="Download"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      downloadImage(entry.url, `muapi-${entry.id || idx}.jpg`);
-                    }}
-                    className="p-2 bg-black/60 backdrop-blur-md rounded-full text-white hover:bg-primary hover:text-black transition-all border border-white/10"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
-                    </svg>
-                  </button>
-                </div>
-
-                {/* Prompt & Details */}
-                <div className="p-3 bg-black/80 backdrop-blur-sm border-t border-white/5 flex-1 flex flex-col justify-between gap-2">
-                  <p className="text-white/70 text-xs line-clamp-3 leading-relaxed" title={entry.prompt}>
-                    {entry.prompt || "No prompt provided"}
-                  </p>
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="text-[10px] font-bold text-primary px-2 py-0.5 bg-primary/10 rounded border border-primary/20">
-                      {entry.model?.replace("-", " ")}
-                    </span>
-                    <span className="text-[10px] text-white/40">{entry.aspect_ratio}</span>
-                  </div>
-                </div>
-              </div>
+                entry={{
+                  status: entry.status || (entry.url ? "ready" : "pending"),
+                  ...entry,
+                }}
+                mediaType="image"
+                onOpen={(e) => setDetailEntry(e)}
+                onDownload={(e) =>
+                  e.url &&
+                  downloadImage(e.url, `${e.providerId || catalogProvider}-${e.id || idx}.jpg`)
+                }
+                onRetry={handleRetryEntry}
+              />
             ))}
           </div>
         ) : (
@@ -1197,52 +2081,57 @@ export default function ImageStudio({
                   </svg>
                 </div>
                 <div className="absolute top-4 right-4 text-[10px] text-primary/40 animate-pulse">
-                  ✨
+                  Ã¢Å“Â¨
                 </div>
               </div>
             </div>
-            <h1 className="text-3xl sm:text-5xl md:text-6xl font-extrabold text-white tracking-tight mb-4 text-center px-4">
-              <span className="text-white/40 font-medium">START CREATING WITH</span>
+            <h1 className="text-3xl sm:text-5xl md:text-6xl font-extrabold text-foreground tracking-tight mb-4 text-center px-4">
+              <span className="text-foreground-muted font-medium">START CREATING WITH</span>
               <br />
-              <span className="text-white">IMAGE STUDIO</span>
+              <span className="text-foreground">IMAGE STUDIO</span>
             </h1>
-            <p className="text-white/40 text-sm md:text-base font-medium tracking-wide text-center max-w-lg leading-relaxed">
-              Describe a scene, character, mood, or style — and watch it come to life
+            <p className="text-foreground-muted text-sm md:text-base font-medium tracking-wide text-center max-w-lg leading-relaxed">
+              Describe a scene, character, mood, or style Ã¢â‚¬â€ and watch it come to life
             </p>
           </div>
         )}
       </div>
 
-      {/* ── BOTTOM PROMPT BAR ── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ BOTTOM PROMPT BAR Ã¢â€â‚¬Ã¢â€â‚¬ */}
       <div 
         className="absolute bottom-4 w-full max-w-[95%] lg:max-w-4xl z-40 animate-fade-in-up" 
         style={{ animationDelay: "0.2s" }}
       >
-        <div className="w-full bg-[#0a0a0a]/80 backdrop-blur-3xl rounded-md border border-white/10 p-4 flex flex-col gap-2 shadow-2xl">
+        <div className="w-full studio-surface backdrop-blur-3xl rounded-md p-4 flex flex-col gap-2 shadow-2xl">
           {/* Top row: upload picker + textarea */}
           <div className="flex items-center gap-2">
-            <UploadButton
-              apiKey={apiKey}
-              maxImages={maxImages}
-              onSelect={handleUploadSelect}
-              onClear={handleUploadClear}
-              initialUrls={uploadedImageUrls}
-            />
+            <div
+              className={uploadAvail.canRun ? "" : "opacity-50 pointer-events-none"}
+              title={uploadAvail.canRun ? undefined : uploadAvail.message}
+            >
+              <UploadButton
+                routing={baseRouting}
+                apiKey={apiKey}
+                maxImages={maxImages}
+                onSelect={handleUploadSelect}
+                onClear={handleUploadClear}
+                initialUrls={uploadedImageUrls}
+              />
+            </div>
             <div className="flex-1 flex flex-col gap-2">
-              <textarea
-                ref={textareaRef}
+              <MentionPromptField
                 value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onInput={handleTextareaInput}
+                onChange={setPrompt}
+                assets={mentionAssets}
                 placeholder={placeholderText}
                 rows={1}
-                className="w-full bg-transparent border-none text-white text-sm placeholder:text-white/20 focus:outline-none resize-none pt-1 leading-relaxed min-h-[40px] max-h-[150px] md:max-h-[250px] overflow-y-auto custom-scrollbar"
+                className="w-full bg-transparent border-none text-foreground text-sm placeholder:text-foreground-muted focus:outline-none resize-none pt-1 leading-relaxed min-h-[40px] max-h-[150px] md:max-h-[250px] overflow-y-auto custom-scrollbar"
               />
             </div>
           </div>
 
           {/* Bottom row: controls + generate */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pt-2 border-t border-white/[0.03] relative">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pt-2 border-t border-border-subtle relative">
             {/* Left controls */}
             <div className="flex items-center gap-2 relative flex-wrap pb-1 md:pb-0">
               {/* Model button */}
@@ -1253,12 +2142,12 @@ export default function ImageStudio({
                     e.stopPropagation();
                     setDropdownOpen((o) => (o === "model" ? null : "model"));
                   }}
-                  className="flex items-center gap-2 px-3 py-2 bg-white/[0.03] hover:bg-white/[0.06] rounded-md transition-all border border-white/[0.03] group whitespace-nowrap"
+                  className={PROMPT_CHIP}
                 >
-                  <div className="w-4 h-4 bg-[#22d3ee] rounded flex items-center justify-center">
+                  <div className="w-4 h-4 bg-primary rounded flex items-center justify-center">
                     <span className="text-[9px] font-bold text-black uppercase">G</span>
                   </div>
-                  <span className="text-xs font-semibold text-white/70 group-hover:text-[#22d3ee] transition-colors">
+                  <span className={PROMPT_CHIP_LABEL}>
                     {selectedModelName}
                   </span>
                   <svg
@@ -1278,13 +2167,15 @@ export default function ImageStudio({
                   <div
                     ref={dropdownRef}
                     onClick={(e) => e.stopPropagation()}
-                    className="absolute bottom-[calc(100%+12px)] left-0 z-50 bg-[#0a0a0a] rounded-lg p-3 shadow-2xl border border-white/[0.05] w-[calc(100vw-3rem)] max-w-xs"
+                    className={`${PROMPT_POPOVER} w-[calc(100vw-3rem)] max-w-xs max-h-[60vh] overflow-y-auto`}
                   >
-                    <ModelDropdown
-                      models={currentModels}
-                      selectedModel={selectedModelId}
+                    <UnifiedModelDropdown
+                      sections={modelSections}
+                      selectedModelId={selectedModelId}
+                      selectedProviderId={selectedModelProvider}
                       onSelect={handleModelSelect}
                       onClose={() => setDropdownOpen(null)}
+                      onOpenApiSettings={onOpenApiSettings}
                     />
                   </div>
                 )}
@@ -1298,12 +2189,12 @@ export default function ImageStudio({
                     e.stopPropagation();
                     setDropdownOpen((o) => (o === "ar" ? null : "ar"));
                   }}
-                  className="flex items-center gap-2 px-3 py-2 bg-white/[0.03] hover:bg-white/[0.06] rounded-md transition-all border border-white/[0.03] group whitespace-nowrap"
+                  className={PROMPT_CHIP}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-40 text-white">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={PROMPT_ICON}>
                     <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                   </svg>
-                  <span className="text-[11px] font-semibold text-white/70 group-hover:text-[#22d3ee] transition-colors">
+                  <span className={PROMPT_CHIP_LABEL_SM}>
                     {selectedAr}
                   </span>
                 </button>
@@ -1311,7 +2202,7 @@ export default function ImageStudio({
                 {dropdownOpen === "ar" && (
                   <div
                     onClick={(e) => e.stopPropagation()}
-                    className="absolute bottom-[calc(100%+12px)] left-0 z-50 bg-[#0a0a0a] rounded-md p-3 max-h-[40vh] overflow-y-auto custom-scrollbar shadow-2xl border border-white/10 min-w-[160px]"
+                    className={`${PROMPT_POPOVER} rounded-md max-h-[40vh] overflow-y-auto min-w-[160px]`}
                   >
                     <SimpleDropdown
                       title="Aspect Ratio"
@@ -1324,41 +2215,77 @@ export default function ImageStudio({
                 )}
               </div>
 
-              {/* Quality/resolution button */}
-              {showQualityBtn && (
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDropdownOpen((o) => (o === "quality" ? null : "quality"));
-                    }}
-                    className="flex items-center gap-2 px-3 py-2 bg-white/[0.03] hover:bg-white/[0.06] rounded-md transition-all border border-white/[0.03] group whitespace-nowrap"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-40 text-white">
+              {/* Quality chip (GPT Image 2) */}
+              {showQualityChip ? (
+                <ModelInputChipRow
+                  chipClassName={`${PROMPT_CHIP} group`}
+                  icon={
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={PROMPT_ICON}>
+                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                    </svg>
+                  }
+                  label={
+                    selectedQuality
+                      ? String(selectedQuality).charAt(0).toUpperCase() + String(selectedQuality).slice(1)
+                      : "Medium"
+                  }
+                  open={dropdownOpen === "quality"}
+                  onToggle={(e) => {
+                    e.stopPropagation();
+                    setDropdownOpen((o) => (o === "quality" ? null : "quality"));
+                  }}
+                  popoverClassName={`${PROMPT_POPOVER} rounded-md max-h-[40vh] overflow-y-auto min-w-[160px]`}
+                >
+                  <SimpleDropdown
+                    title="Quality"
+                    options={qualityEnumOptions}
+                    selected={selectedQuality}
+                    onSelect={(val) => setSelectedQuality(val)}
+                    onClose={() => setDropdownOpen(null)}
+                  />
+                </ModelInputChipRow>
+              ) : null}
+
+              {/* Resolution tier chip (GPT Image 2 / Nano Banana) */}
+              {showResolutionChip ? (
+                <ModelInputChipRow
+                  chipClassName={`${PROMPT_CHIP} group`}
+                  icon={
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={PROMPT_ICON}>
                       <path d="M6 2L3 6v15a2 2 0 002 2h14a2 2 0 002-2V6l-3-4H6z" />
                     </svg>
-                    <span className="text-[11px] font-semibold text-white/70 group-hover:text-[#22d3ee] transition-colors">
-                      {selectedQuality || currentResolutions[0]}
-                    </span>
-                  </button>
-
-                  {dropdownOpen === "quality" && (
-                    <div
-                      onClick={(e) => e.stopPropagation()}
-                      className="absolute bottom-[calc(100%+12px)] left-0 z-50 bg-[#0a0a0a] rounded-md p-3 max-h-[40vh] overflow-y-auto custom-scrollbar shadow-2xl border border-white/[0.05] min-w-[160px]"
-                    >
-                      <SimpleDropdown
-                        title="Resolution"
-                        options={currentResolutions}
-                        selected={selectedQuality}
-                        onSelect={(val) => setSelectedQuality(val)}
-                        onClose={() => setDropdownOpen(null)}
-                      />
-                    </div>
+                  }
+                  label={
+                    useTierResolutionUi
+                      ? formatTierChipLabel(selectedResolutionTier || resolutionTierOptions[0])
+                      : selectedQuality || legacyResolutionOptions[0]
+                  }
+                  open={dropdownOpen === "resolution"}
+                  onToggle={(e) => {
+                    e.stopPropagation();
+                    setDropdownOpen((o) => (o === "resolution" ? null : "resolution"));
+                  }}
+                  popoverClassName={`${PROMPT_POPOVER} rounded-md max-h-[40vh] overflow-y-auto min-w-[180px]`}
+                >
+                  {useTierResolutionUi ? (
+                    <TierOptionDropdown
+                      title="Select resolution"
+                      options={resolutionTierOptions}
+                      selected={selectedResolutionTier || resolutionTierOptions[0]}
+                      onSelect={(val) => setSelectedResolutionTier(val)}
+                      onClose={() => setDropdownOpen(null)}
+                    />
+                  ) : (
+                    <SimpleDropdown
+                      title="Resolution"
+                      options={legacyResolutionOptions}
+                      selected={selectedQuality}
+                      onSelect={(val) => setSelectedQuality(val)}
+                      onClose={() => setDropdownOpen(null)}
+                    />
                   )}
-                </div>
-              )}
+                </ModelInputChipRow>
+              ) : null}
 
               {/* Effect type button */}
               {showEffectBtn && (
@@ -1369,12 +2296,12 @@ export default function ImageStudio({
                       e.stopPropagation();
                       setDropdownOpen((o) => (o === "effect" ? null : "effect"));
                     }}
-                    className="flex items-center gap-2 px-3 py-2 bg-white/[0.03] hover:bg-white/[0.06] rounded-md transition-all border border-white/[0.03] group whitespace-nowrap"
+                    className={PROMPT_CHIP}
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-40 text-white">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={PROMPT_ICON}>
                       <path d="M5 3l14 9-14 9V3z" />
                     </svg>
-                    <span className="text-[11px] font-semibold text-white/70 group-hover:text-[#22d3ee] transition-colors max-w-[140px] truncate">
+                    <span className={`${PROMPT_CHIP_LABEL_SM} max-w-[140px] truncate`}>
                       {selectedEffect || "Effect"}
                     </span>
                   </button>
@@ -1382,7 +2309,7 @@ export default function ImageStudio({
                   {dropdownOpen === "effect" && (
                     <div
                       onClick={(e) => e.stopPropagation()}
-                      className="absolute bottom-[calc(100%+12px)] left-0 z-50 bg-[#0a0a0a] rounded-md p-3 max-h-[40vh] overflow-y-auto custom-scrollbar shadow-2xl border border-white/[0.05] min-w-[200px]"
+                      className={`${PROMPT_POPOVER} rounded-md max-h-[40vh] overflow-y-auto min-w-[200px]`}
                     >
                       <SimpleDropdown
                         title="Effect Type"
@@ -1396,76 +2323,74 @@ export default function ImageStudio({
                 </div>
               )}
 
-              {/* Batch size selector */}
-              <div className="flex items-center gap-1 bg-white/[0.03] rounded-md p-1 border border-white/[0.03]">
-                {[1, 2, 3, 4].map((num) => (
-                  <button
-                    key={num}
-                    type="button"
-                    onClick={() => setBatchSize(num)}
-                    className={`w-7 h-7 flex items-center justify-center rounded-md text-[10px] font-black transition-all ${
-                      batchSize === num
-                        ? "bg-[#22d3ee] text-black shadow-lg shadow-[#22d3ee]/20"
-                        : "text-white/40 hover:text-white/80 hover:bg-white/5"
-                    }`}
-                  >
-                    {num}
-                  </button>
-                ))}
-              </div>
+              {recreateRefWarning ? (
+                <p className="text-[10px] text-amber-400/90 px-1" role="status">
+                  {recreateRefWarning}
+                </p>
+              ) : null}
+
+              <CatalogInputChips
+                studioId="image"
+                modelId={selectedModelId}
+                providerId={catalogProvider}
+                catalogMode={imageCatalogMode}
+                values={extraControls}
+                onChange={(field, value) =>
+                  setExtraControls((prev) => ({ ...prev, [field]: value }))
+                }
+              />
+
+              {showSeedUi ? (
+                <SeedControl value={seedValue} onChange={setSeedValue} className="shrink-0" />
+              ) : null}
+
+              {!imageMode ? (
+                <BatchSizeStepper
+                  value={batchSize}
+                  min={1}
+                  max={4}
+                  onChange={setBatchSize}
+                  className="shrink-0"
+                />
+              ) : null}
             </div>
 
-            {/* Generate button */}
-            <button
-              type="button"
+            <p className="text-[11px] text-foreground-muted mb-2 w-full sm:w-auto" role="status">
+              {providerPreviewLabel}
+              {lastChargedUsd != null ? (
+                <span className="block mt-0.5" dir="ltr">
+                  Last charged: {formatCostUsd(lastChargedUsd)}
+                </span>
+              ) : null}
+            </p>
+            <GenerateCostButton
               onClick={handleGenerate}
-              disabled={generating}
-              className="bg-[#22d3ee] text-black px-4 py-2 rounded-md font-medium text-sm hover:bg-[#e5ff33] hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 w-full sm:w-auto shadow-lg shadow-[#22d3ee]/10 disabled:opacity-50 disabled:cursor-not-allowed z-10"
-            >
-              {generating ? (
-                <>
-                  <span className="animate-spin inline-block text-black">◌</span>
-                  Generating...
-                </>
-              ) : generateError ? (
-                `Error: ${generateError}`
-              ) : (
-                <>
-                  <span>Generate</span>
-                </>
-              )}
-            </button>
+              disabled={generating || t2iKeyMissing || Boolean(genResolved.blockReason)}
+              generating={generating}
+              generateError={generateError}
+              uploadPhase={uploadPhase}
+              unitCostUsd={unitCostUsd}
+              batchSize={batchSize}
+              source={costSource}
+              isLoadingCost={isLoadingCost}
+              className="bg-primary text-black px-4 py-2 rounded-md font-medium text-sm hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-0.5 w-full sm:w-auto min-w-[100px] shadow-lg shadow-primary/10 disabled:opacity-50 disabled:cursor-not-allowed z-10"
+            />
           </div>
         </div>
       </div>
 
-      {/* ── FULLSCREEN IMAGE MODAL ── */}
-      {fullscreenUrl && (
-        <div 
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-sm animate-fade-in"
-          onClick={() => setFullscreenUrl(null)}
-        >
-          <button
-            type="button"
-            className="absolute top-6 right-6 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors border border-white/10"
-            onClick={(e) => {
-              e.stopPropagation();
-              setFullscreenUrl(null);
-            }}
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-          <img 
-            src={fullscreenUrl} 
-            alt="Fullscreen Preview" 
-            className="max-w-[95vw] max-h-[95vh] rounded-2xl shadow-2xl object-contain animate-scale-up" 
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      )}
+      {detailEntry ? (
+        <GenerationDetailViewer
+          entry={detailEntry}
+          mediaType="image"
+          onClose={() => setDetailEntry(null)}
+          onDownload={(e) =>
+            e.url &&
+            downloadImage(e.url, `${e.providerId || catalogProvider}-${e.id || "out"}.jpg`)
+          }
+          providerLabel={providerDisplayLabel}
+        />
+      ) : null}
     </div>
   );
 }

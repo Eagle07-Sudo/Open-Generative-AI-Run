@@ -1,0 +1,216 @@
+[
+  {
+    "id": "rf-image-t2i",
+    "studioId": "image",
+    "op": "imageT2i",
+    "routingMode": "runware-first",
+    "keys": { "muapi": true, "runware": true },
+    "allowMuapiFallback": true,
+    "expectedProvider": "runware",
+    "usedFallback": false
+  },
+  {
+    "id": "agents-muapi",
+    "studioId": "agents",
+    "op": "agents",
+    "routingMode": "runware-first",
+    "keys": { "muapi": true, "runware": true },
+    "allowMuapiFallback": true,
+    "expectedProvider": "muapi",
+    "usedFallback": false
+  },
+  {
+    "id": "workflows-muapi",
+    "studioId": "workflows",
+    "op": "workflow",
+    "routingMode": "runware-only",
+    "keys": { "muapi": true, "runware": true },
+    "allowMuapiFallback": true,
+    "expectedProvider": "muapi",
+    "usedFallback": false
+  },
+  {
+    "id": "muapi-only-image",
+    "studioId": "image",
+    "op": "imageT2i",
+    "routingMode": "muapi-only",
+    "keys": { "muapi": true, "runware": true },
+    "allowMuapiFallback": true,
+    "expectedProvider": "muapi",
+    "usedFallback": false
+  },
+  {
+    "id": "runware-only-video",
+    "studioId": "video",
+    "op": "videoT2i",
+    "routingMode": "runware-only",
+    "keys": { "muapi": true, "runware": true },
+    "allowMuapiFallback": true,
+    "expectedProvider": "runware",
+    "usedFallback": false
+  },
+  {
+    "id": "missing-runware-fallback",
+    "studioId": "image",
+    "op": "imageT2i",
+    "routingMode": "runware-first",
+    "keys": { "muapi": true, "runware": false },
+    "allowMuapiFallback": true,
+    "expectedProvider": "muapi",
+    "usedFallback": true
+  },
+  {
+    "id": "missing-muapi-agents",
+    "studioId": "agents",
+    "op": "agents",
+    "routingMode": "runware-first",
+    "keys": { "muapi": false, "runware": true },
+    "allowMuapiFallback": true,
+    "expectedProvider": "muapi",
+    "blockReason": "missing_key"
+  },
+  {
+    "id": "per-studio-force-muapi-video",
+    "studioId": "video",
+    "op": "videoT2i",
+    "routingMode": "runware-first",
+    "perStudioRouting": { "video": "muapi" },
+    "keys": { "muapi": true, "runware": true },
+    "allowMuapiFallback": true,
+    "expectedProvider": "muapi",
+    "usedFallback": false
+  },
+  {
+    "id": "provider-override-muapi",
+    "studioId": "image",
+    "op": "imageT2i",
+    "routingMode": "runware-first",
+    "providerOverride": "muapi",
+    "keys": { "muapi": true, "runware": true },
+    "allowMuapiFallback": true,
+    "expectedProvider": "muapi",
+    "usedFallback": false
+  },
+  {
+    "id": "provider-override-runware",
+    "studioId": "image",
+    "op": "imageT2i",
+    "routingMode": "muapi-only",
+    "providerOverride": "runware",
+    "keys": { "muapi": true, "runware": true },
+    "allowMuapiFallback": true,
+    "expectedProvider": "runware",
+    "usedFallback": false
+  },
+  {
+    "id": "provider-override-missing-key",
+    "studioId": "image",
+    "op": "imageT2i",
+    "routingMode": "runware-first",
+    "providerOverride": "runware",
+    "keys": { "muapi": true, "runware": false },
+    "allowMuapiFallback": true,
+    "expectedProvider": "runware",
+    "blockReason": "missing_key"
+  },
+  {
+    "id": "upload-runware-first",
+    "studioId": "image",
+    "op": "upload",
+    "routingMode": "runware-first",
+    "keys": { "muapi": true, "runware": true },
+    "allowMuapiFallback": true,
+    "expectedProvider": "runware",
+    "usedFallback": false
+  },
+  {
+    "id": "upload-muapi-only",
+    "studioId": "image",
+    "op": "upload",
+    "routingMode": "muapi-only",
+    "keys": { "muapi": true, "runware": true },
+    "allowMuapiFallback": true,
+    "expectedProvider": "muapi",
+    "usedFallback": false
+  },
+  {
+    "id": "upload-missing-runware-fallback",
+    "studioId": "image",
+    "op": "upload",
+    "routingMode": "runware-first",
+    "keys": { "muapi": true, "runware": false },
+    "allowMuapiFallback": true,
+    "expectedProvider": "muapi",
+    "usedFallback": true
+  },
+  {
+    "id": "upload-runware-only",
+    "studioId": "image",
+    "op": "upload",
+    "routingMode": "runware-only",
+    "keys": { "muapi": true, "runware": true },
+    "allowMuapiFallback": true,
+    "expectedProvider": "runware",
+    "usedFallback": false
+  },
+  {
+    "id": "upload-runware-only-no-muapi-key",
+    "studioId": "image",
+    "op": "upload",
+    "routingMode": "runware-only",
+    "keys": { "muapi": false, "runware": true },
+    "allowMuapiFallback": true,
+    "expectedProvider": "runware",
+    "usedFallback": false
+  },
+  {
+    "id": "upload-runware-first-runware-only-no-muapi",
+    "studioId": "image",
+    "op": "upload",
+    "routingMode": "runware-first",
+    "keys": { "muapi": false, "runware": true },
+    "allowMuapiFallback": true,
+    "expectedProvider": "runware",
+    "usedFallback": false
+  },
+  {
+    "id": "upload-muapi-only-no-muapi",
+    "studioId": "image",
+    "op": "upload",
+    "routingMode": "muapi-only",
+    "keys": { "muapi": false, "runware": true },
+    "allowMuapiFallback": true,
+    "expectedProvider": "muapi",
+    "blockReason": "missing_key"
+  },
+  {
+    "id": "imageT2i-runware-first-no-keys",
+    "studioId": "image",
+    "op": "imageT2i",
+    "routingMode": "runware-first",
+    "keys": { "muapi": false, "runware": false },
+    "allowMuapiFallback": true,
+    "expectedProvider": "runware",
+    "blockReason": "missing_key"
+  },
+  {
+    "id": "imageI2i-runware-first-no-muapi",
+    "studioId": "image",
+    "op": "imageI2i",
+    "routingMode": "runware-first",
+    "keys": { "muapi": false, "runware": true },
+    "allowMuapiFallback": true,
+    "expectedProvider": "runware",
+    "usedFallback": false
+  },
+  {
+    "id": "imageI2i-runware-first-fallback",
+    "studioId": "image",
+    "op": "imageI2i",
+    "routingMode": "runware-first",
+    "keys": { "muapi": true, "runware": true },
+    "allowMuapiFallback": true,
+    "expectedProvider": "runware",
+    "usedFallback": false
+  }
+]

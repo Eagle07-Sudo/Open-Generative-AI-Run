@@ -1,0 +1,116 @@
+/* Form controls + modal shell — theme via CSS variables (Light/Dark) */
+
+select,
+option {
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+}
+
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+/* Modal chrome — follows effective theme on :root */
+.og-modal {
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  border: 1px solid var(--border-light);
+}
+
+.og-modal-muted {
+  color: var(--text-muted);
+}
+
+.og-modal-secondary {
+  color: var(--text-secondary);
+}
+
+.og-modal-input {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  color: var(--text-primary);
+}
+
+@supports (background: color-mix(in srgb, white 50%, black)) {
+  .og-modal-input {
+    background: color-mix(in srgb, var(--bg-card) 90%, transparent);
+  }
+}
+
+.og-modal-tab-active {
+  background: color-mix(in srgb, var(--bg-card) 80%, var(--text-primary));
+  color: var(--text-primary);
+}
+
+@supports not (background: color-mix(in srgb, white 50%, black)) {
+  .og-modal-tab-active {
+    background: var(--bg-card);
+  }
+}
+
+.og-modal-tab-inactive {
+  color: var(--text-muted);
+}
+
+.og-modal-tab-inactive:hover {
+  color: var(--text-secondary);
+}
+
+.og-modal-segment-active {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+.og-modal-segment-inactive {
+  color: var(--text-muted);
+}
+
+.og-modal-segment-inactive:hover {
+  color: var(--text-secondary);
+}
+
+.og-modal-btn-ghost {
+  background: transparent;
+  border: 1px solid var(--border-light);
+  color: var(--text-secondary);
+}
+
+.og-modal-btn-ghost:hover {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+/* Preview island — vars injected from getPreviewCssVars() */
+[data-theme-preview] {
+  background: var(--preview-bg-panel);
+  border: 1px solid var(--preview-border);
+  color: var(--preview-text-primary);
+  border-radius: var(--border-radius-md, 10px);
+}
+
+[data-theme-preview] .og-preview-label {
+  color: var(--preview-text-muted);
+}
+
+[data-theme-preview] .og-preview-card {
+  background: var(--preview-bg-card);
+  color: var(--preview-text-muted);
+  border: 1px solid var(--preview-border);
+}
+
+[data-theme-preview] .og-preview-primary {
+  background: var(--preview-color-primary);
+  color: var(--preview-text-primary);
+}
+
+[data-theme-preview] .og-preview-gradient {
+  background: linear-gradient(
+    to right,
+    var(--preview-color-primary),
+    var(--preview-color-accent)
+  );
+}

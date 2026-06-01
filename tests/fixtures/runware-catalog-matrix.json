@@ -1,0 +1,38 @@
+[
+  {
+    "id": "flux-2-pro-image",
+    "modality": "image",
+    "catalogId": "rw-flux-2-pro",
+    "runwareModel": "runware:flux@2-pro",
+    "expectedTaskType": "imageInference",
+    "taskProfile": "image-standard",
+    "minReleaseDate": "2025-01-01"
+  },
+  {
+    "id": "gpt-image-2",
+    "modality": "image",
+    "catalogId": "rw-gpt-image-2",
+    "runwareModel": "openai:gpt-image@2",
+    "expectedTaskType": "imageInference",
+    "taskProfile": "image-openai",
+    "minReleaseDate": "2025-01-01"
+  },
+  {
+    "id": "seedance-2-video",
+    "modality": "video",
+    "catalogId": "rw-seedance-2",
+    "runwareModel": "runware:seedance@2.0",
+    "expectedTaskType": "videoInference",
+    "taskProfile": "video-sota",
+    "minReleaseDate": "2025-01-01"
+  },
+  {
+    "id": "eleven-v3-audio",
+    "modality": "audio",
+    "catalogId": "rw-eleven-v3",
+    "runwareModel": "runware:eleven@v3",
+    "expectedTaskType": "audioInference",
+    "taskProfile": "audio-standard",
+    "minReleaseDate": "2025-01-01"
+  }
+]

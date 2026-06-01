@@ -1,0 +1,27 @@
+---
+description: Fork UI and i18n — thin layer over upstream studios
+globs: components/**/*.{js,jsx},app/**/*.{js,jsx,css},src/components/**/*,src/lib/i18n.js,src/styles/**/*
+alwaysApply: false
+---
+
+# UI fork tweaks
+
+## Priority paths
+
+- **Next.js / studio package:** `packages/studio/` via `import from 'studio'` — primary target for provider UI.
+- **Electron / Vite:** `src/components/`, `components/StandaloneShell.js` — keep in sync or document exceptions in `FORK.md`.
+
+## Rules
+
+- Theme, layout, i18n: prefer `src/lib/i18n.js` and fork CSS — document paths in `FORK.md`.
+- On upstream studio merges: take **theirs** for large components, then re-apply a **thin** UI layer only.
+- Entry: `ApiKeyModal` = dual provider (Muapi | Runware); `hasCloudSession` gate in `StandaloneShell.js` (not Muapi-only).
+- Settings: default provider = Muapi; Runware optional. Blank key fields on Save **preserve** stored keys; never pre-fill secrets in inputs.
+- Helpers: `components/cloudSession.js` + `tests/cloudSession.test.js`.
+- Security: see `SECURITY.md`; never `console.log` full API keys or Bearer tokens in `app/api/**` or `components/`.
+- Git commit/push: user delegates to agent — see `git-secrets-and-push.mdc`; run gitleaks scripts before commit/push.
+
+## Avoid
+
+- Copy-pasting entire upstream studio files into fork-only duplicates.
+- Hard-coding English strings in upstream-owned components when i18n exists.

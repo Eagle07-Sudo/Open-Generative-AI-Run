@@ -1,0 +1,72 @@
+[
+  {
+    "id": "both-sections-runware-first",
+    "studioId": "image",
+    "routingMode": "runware-first",
+    "keys": { "muapi": true, "runware": true },
+    "imageMode": "t2i",
+    "expectedSectionIds": ["runware", "muapi"]
+  },
+  {
+    "id": "muapi-only-section",
+    "studioId": "image",
+    "routingMode": "muapi-only",
+    "keys": { "muapi": true, "runware": true },
+    "imageMode": "t2i",
+    "expectedSectionIds": ["muapi"]
+  },
+  {
+    "id": "runware-only-section",
+    "studioId": "image",
+    "routingMode": "runware-only",
+    "keys": { "muapi": true, "runware": true },
+    "imageMode": "t2i",
+    "expectedSectionIds": ["runware"]
+  },
+  {
+    "id": "muapi-key-only-runware-first",
+    "studioId": "image",
+    "routingMode": "runware-first",
+    "keys": { "muapi": true, "runware": false },
+    "imageMode": "t2i",
+    "expectedSectionIds": ["muapi"]
+  },
+  {
+    "id": "i2i-both-sections-runware-first",
+    "studioId": "image",
+    "routingMode": "runware-first",
+    "keys": { "muapi": true, "runware": true },
+    "imageMode": "i2i",
+    "expectedSectionIds": ["runware", "muapi"]
+  },
+  {
+    "id": "override-muapi-on-runware-first",
+    "studioId": "image",
+    "op": "imageT2i",
+    "routingMode": "runware-first",
+    "keys": { "muapi": true, "runware": true },
+    "providerOverride": "muapi",
+    "expectedProvider": "muapi",
+    "usedFallback": false
+  },
+  {
+    "id": "override-runware-on-muapi-only",
+    "studioId": "image",
+    "op": "imageT2i",
+    "routingMode": "muapi-only",
+    "keys": { "muapi": true, "runware": true },
+    "providerOverride": "runware",
+    "expectedProvider": "runware",
+    "usedFallback": false
+  },
+  {
+    "id": "override-ignored-agents",
+    "studioId": "agents",
+    "op": "agents",
+    "routingMode": "runware-first",
+    "keys": { "muapi": true, "runware": true },
+    "providerOverride": "runware",
+    "expectedProvider": "muapi",
+    "usedFallback": false
+  }
+]

@@ -1,4 +1,9 @@
 import './style.css';
+import { applyPreferences, loadPreferences, subscribeSystemTheme } from './lib/preferences.js';
+
+applyPreferences(loadPreferences());
+subscribeSystemTheme(() => applyPreferences(loadPreferences()));
+
 import { Header } from './components/Header.js';
 import { ImageStudio } from './components/ImageStudio.js';
 

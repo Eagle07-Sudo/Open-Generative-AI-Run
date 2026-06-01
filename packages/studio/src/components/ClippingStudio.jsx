@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { runClipping, uploadFile } from "../muapi.js";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { runClippingForStudio, uploadFileForStudio } from "../studioGenerate.js";
+import { buildRoutingContext } from "../studioProps.js";
+import { getStudioOpAvailability } from "../studioOpAvailability.js";
 
 // ---------------------------------------------------------------------------
 // Inline SVG Icons
 // ---------------------------------------------------------------------------
-const ScissorsIcon = ({ className = "text-[#22d3ee]" }) => (
+const ScissorsIcon = ({ className = "text-primary" }) => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
     <circle cx="6" cy="6" r="3" />
     <circle cx="6" cy="18" r="3" />
@@ -51,7 +53,7 @@ const ClockIcon = () => (
 );
 
 const CheckIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" strokeWidth="3">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
     <polyline points="20 6 9 17 4 12" />
   </svg>
 );
@@ -89,43 +91,56 @@ const getAspectClass = (ar) => {
 // ---------------------------------------------------------------------------
 export default function ClippingStudio({
   apiKey,
+  muapiKey,
+  runwareApiKey,
+  routingPrefs,
   onGenerationComplete,
   droppedFiles,
   onFilesHandled,
 }) {
+  const routing = buildRoutingContext({ apiKey, muapiKey, runwareApiKey, routingPrefs });
+  const uploadAvail = useMemo(
+    () => getStudioOpAvailability("clipping", "upload", routing),
+    [
+      routing.routingMode,
+      routing.muapiKey,
+      routing.runwareApiKey,
+      routing.allowMuapiFallback,
+    ],
+  );
   const PERSIST_KEY = "hg_clipping_studio_persistent";
 
-  // ── Clipping Parameters State ───────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Clipping Parameters State Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const [videoUrl, setVideoUrl] = useState("");
   const [numHighlights, setNumHighlights] = useState(3);
   const [aspectRatio, setAspectRatio] = useState("9:16");
   const [returnCoordinatesOnly, setReturnCoordinatesOnly] = useState(false);
   
-  // ── Dropdowns state ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Dropdowns state Ã¢â€â‚¬Ã¢â€â‚¬
   const [aspectDropdownOpen, setAspectDropdownOpen] = useState(false);
   const [highlightsDropdownOpen, setHighlightsDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
   const highlightsDropdownRef = useRef(null);
   const textareaRef = useRef(null);
 
-  // ── Upload State ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Upload State Ã¢â€â‚¬Ã¢â€â‚¬
   const [videoUploading, setVideoUploading] = useState(false);
   const [videoProgress, setVideoProgress] = useState(0);
   const videoFileInputRef = useRef(null);
 
-  // ── Generation State ─────────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Generation State Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState(null);
   const [fullscreenUrl, setFullscreenUrl] = useState(null);
   const [elapsedTime, setElapsedTime] = useState(0);
   const timerRef = useRef(null);
 
-  // ── Output State ─────────────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Output State Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const [result, setResult] = useState(null); // stores parsed completed API output
   const [activeHighlightIndex, setActiveHighlightIndex] = useState(0);
   const mainVideoRef = useRef(null);
 
-  // ── History State ────────────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ History State Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const [history, setHistory] = useState([]);
 
   const ASPECT_RATIOS = [
@@ -168,7 +183,7 @@ export default function ClippingStudio({
     };
   }, [isGenerating]);
 
-  // ── Load Persistent State from localStorage ──────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Load Persistent State from localStorage Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   useEffect(() => {
     try {
       const stored = localStorage.getItem(PERSIST_KEY);
@@ -186,7 +201,7 @@ export default function ClippingStudio({
     }
   }, []);
 
-  // ── Save Persistent State to localStorage ───────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Save Persistent State to localStorage Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   useEffect(() => {
     const timer = setTimeout(() => {
       try {
@@ -206,14 +221,19 @@ export default function ClippingStudio({
     return () => clearTimeout(timer);
   }, [videoUrl, numHighlights, aspectRatio, returnCoordinatesOnly, history, result]);
 
-  // ── Handle Dropped Files ────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Handle Dropped Files Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   useEffect(() => {
     if (droppedFiles && droppedFiles.length > 0) {
       const videoFiles = droppedFiles.filter(f => f.type.startsWith('video/'));
       if (videoFiles.length > 0) {
+        if (!uploadAvail.canRun) {
+          alert(uploadAvail.message);
+          onFilesHandled?.();
+          return;
+        }
         setVideoUploading(true);
         setVideoProgress(0);
-        uploadFile(apiKey, videoFiles[0], (pct) => {
+        uploadFileForStudio(routing, videoFiles[0], (pct) => {
           setVideoProgress(pct);
         })
           .then(url => {
@@ -242,7 +262,7 @@ export default function ClippingStudio({
     return () => clearTimeout(timer);
   }, [videoUrl]);
 
-  // ── Highlight Seeking Helper ─────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Highlight Seeking Helper Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const seekToHighlight = (startSec) => {
     if (mainVideoRef.current) {
       mainVideoRef.current.currentTime = startSec;
@@ -258,7 +278,7 @@ export default function ClippingStudio({
     return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
   };
 
-  // ── Copy Link & Download Helpers ─────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Copy Link & Download Helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
     alert("URL copied to clipboard!");
@@ -289,10 +309,14 @@ export default function ClippingStudio({
     el.style.height = Math.min(el.scrollHeight, maxH) + "px";
   };
 
-  // ── Video File Handlers ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Video File Handlers Ã¢â€â‚¬Ã¢â€â‚¬
   const handleVideoFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (!uploadAvail.canRun) {
+      alert(uploadAvail.message);
+      return;
+    }
     if (file.size > 100 * 1024 * 1024) {
       alert("Video exceeds 100MB limit.");
       return;
@@ -300,7 +324,7 @@ export default function ClippingStudio({
     setVideoUploading(true);
     setVideoProgress(0);
     try {
-      const url = await uploadFile(apiKey, file, (pct) => {
+      const url = await uploadFileForStudio(routing, file, (pct) => {
         setVideoProgress(pct);
       });
       setVideoUrl(url);
@@ -318,7 +342,7 @@ export default function ClippingStudio({
     setVideoUrl("");
   };
 
-  // ── Dispatch Run / Call submitAndPoll ────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Dispatch Run / Call submitAndPoll Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const handleGenerate = async () => {
     if (!videoUrl) {
       alert("Please upload a video or paste a video URL first.");
@@ -337,7 +361,7 @@ export default function ClippingStudio({
         return_coordinates_only: returnCoordinatesOnly,
       };
 
-      const res = await runClipping(apiKey, params);
+      const res = await runClippingForStudio(routing, params);
 
       // Parse the result
       const clips = res.outputs || [];
@@ -398,7 +422,7 @@ export default function ClippingStudio({
   return (
     <div className="w-full h-full flex flex-col items-center justify-center bg-app-bg text-white relative overflow-hidden">
       
-      {/* ─── CENTRAL AREA ─── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ CENTRAL AREA Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */}
       <div className="flex-1 w-full max-w-7xl mx-auto overflow-y-auto custom-scrollbar pb-40 lg:pb-32 px-2">
         
         {/* Error Message */}
@@ -417,7 +441,7 @@ export default function ClippingStudio({
                 <div className="w-16 h-16 bg-primary/5 rounded-2xl flex items-center justify-center border border-primary/10 relative z-10 transition-transform duration-500 group-hover:scale-110">
                   <ScissorsIcon className="text-primary opacity-80 w-8 h-8" />
                 </div>
-                <div className="absolute top-4 right-4 text-[10px] text-primary/40 animate-pulse">✨</div>
+                <div className="absolute top-4 right-4 text-[10px] text-primary/40 animate-pulse">Ã¢Å“Â¨</div>
               </div>
             </div>
             <h1 className="text-3xl sm:text-5xl md:text-6xl font-extrabold text-white tracking-tight mb-4 text-center px-4">
@@ -595,7 +619,7 @@ export default function ClippingStudio({
                             <div className="flex items-center gap-2 text-[10px] text-zinc-400 font-semibold">
                               <ClockIcon />
                               <span>{formatSeconds(start)} - {formatSeconds(end)}</span>
-                              <span className="text-zinc-650">•</span>
+                              <span className="text-zinc-650">Ã¢â‚¬Â¢</span>
                               <span className="text-primary/80 font-bold">{(end - start).toFixed(0)}s duration</span>
                             </div>
                             
@@ -718,7 +742,7 @@ export default function ClippingStudio({
 
       </div>
 
-      {/* ─── FLOATING BOTTOM PROMPT BAR ─── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ FLOATING BOTTOM PROMPT BAR Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */}
       <div className="absolute bottom-4 w-full max-w-[95%] lg:max-w-4xl z-40 animate-fade-in-up" style={{ animationDelay: "0.2s" }}>
         <div className="w-full bg-[#0a0a0a]/80 backdrop-blur-3xl rounded-md border border-white/10 p-4 flex flex-col gap-2 shadow-2xl">
           
@@ -740,8 +764,8 @@ export default function ClippingStudio({
               onClick={() => videoUrl ? clearVideoUpload() : videoFileInputRef.current?.click()}
               className={`w-10 h-10 shrink-0 rounded-full border transition-all flex items-center justify-center relative overflow-hidden ${
                 videoUrl 
-                  ? "border-[#22d3ee]/60 bg-[#22d3ee]/5" 
-                  : "bg-white/5 border-white/[0.03] hover:bg-white/10 hover:border-[#22d3ee]/40"
+                  ? "border-primary/60 bg-primary/5" 
+                  : "bg-white/5 border-white/[0.03] hover:bg-white/10 hover:border-primary/40"
               } group`}
             >
               {videoUploading ? (
@@ -757,24 +781,24 @@ export default function ClippingStudio({
                       fill="transparent"
                       strokeDasharray={88}
                       strokeDashoffset={88 - (88 * videoProgress) / 100}
-                      className="text-[#22d3ee] transition-all duration-300"
+                      className="text-primary transition-all duration-300"
                     />
                   </svg>
-                  <span className="absolute text-[8px] font-black text-[#22d3ee] leading-none">
+                  <span className="absolute text-[8px] font-black text-primary leading-none">
                     {videoProgress}%
                   </span>
                 </div>
               ) : null}
 
               {videoUrl ? (
-                <div className="w-full h-full flex items-center justify-center bg-[#22d3ee]/10 text-[#22d3ee]">
+                <div className="w-full h-full flex items-center justify-center bg-primary/10 text-primary">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                     <polygon points="23 7 16 12 23 17 23 7" />
                     <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
                   </svg>
                 </div>
               ) : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/40 group-hover:text-[#22d3ee] transition-colors">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/40 group-hover:text-primary transition-colors">
                   <polygon points="23 7 16 12 23 17 23 7" />
                   <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
                 </svg>
@@ -815,7 +839,7 @@ export default function ClippingStudio({
               
               {/* Model Identifier (C) */}
               <div className="flex items-center gap-2 px-3 py-2 bg-white/[0.03] rounded-md border border-white/[0.03] whitespace-nowrap">
-                <div className="w-4 h-4 bg-[#22d3ee] rounded flex items-center justify-center shadow-lg shadow-[#22d3ee]/10">
+                <div className="w-4 h-4 bg-primary rounded flex items-center justify-center shadow-lg shadow-primary/10">
                   <span className="text-[9px] font-bold text-black uppercase">C</span>
                 </div>
                 <span className="text-[11px] font-semibold text-white/70">
@@ -833,7 +857,7 @@ export default function ClippingStudio({
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-40 text-white">
                     <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                   </svg>
-                  <span className="text-[11px] font-semibold text-white/70 group-hover:text-[#22d3ee] transition-colors">
+                  <span className="text-[11px] font-semibold text-white/70 group-hover:text-primary transition-colors">
                     {aspectRatio}
                   </span>
                   <ChevronDownIcon />
@@ -872,7 +896,7 @@ export default function ClippingStudio({
                   className="flex items-center gap-2 px-3 py-2 bg-white/[0.03] hover:bg-white/[0.06] rounded-md transition-all border border-white/[0.03] group whitespace-nowrap"
                 >
                   <ClockIcon />
-                  <span className="text-[11px] font-semibold text-white/70 group-hover:text-[#22d3ee] transition-colors">
+                  <span className="text-[11px] font-semibold text-white/70 group-hover:text-primary transition-colors">
                     {numHighlights} Highlights
                   </span>
                   <ChevronDownIcon />
@@ -909,7 +933,7 @@ export default function ClippingStudio({
                 onClick={() => setReturnCoordinatesOnly(!returnCoordinatesOnly)}
                 className={`flex items-center gap-2 px-3 py-2 rounded-md transition-all border whitespace-nowrap text-[11px] font-semibold ${
                   returnCoordinatesOnly 
-                    ? "bg-primary/10 border-primary/20 text-[#22d3ee]" 
+                    ? "bg-primary/10 border-primary/20 text-primary" 
                     : "bg-white/[0.03] border-white/[0.03] text-white/70 hover:bg-white/[0.06] hover:text-white"
                 }`}
               >
@@ -924,11 +948,11 @@ export default function ClippingStudio({
               type="button"
               onClick={handleGenerate}
               disabled={isGenerating}
-              className="bg-[#22d3ee] text-black px-4 py-2 rounded-md font-medium text-sm hover:bg-[#e5ff33] hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 w-full sm:w-auto shadow-lg shadow-[#22d3ee]/10 disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-wider"
+              className="bg-primary text-black px-4 py-2 rounded-md font-medium text-sm hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 w-full sm:w-auto shadow-lg shadow-primary/10 disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-wider"
             >
               {isGenerating ? (
                 <>
-                  <span className="animate-spin inline-block text-black">◌</span>
+                  <span className="animate-spin inline-block text-black">Ã¢â€”Å’</span>
                   <span>{elapsedTime}s</span>
                 </>
               ) : (

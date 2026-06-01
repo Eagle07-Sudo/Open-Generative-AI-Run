@@ -1,3 +1,4 @@
+// SECURITY: never log full API keys or Bearer tokens.
 import { NextResponse } from 'next/server';
 
 const MUAPI_BASE = 'https://api.muapi.ai';
