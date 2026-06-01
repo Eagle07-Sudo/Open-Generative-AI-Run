@@ -12,7 +12,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const studioSrc = join(root, 'packages/studio/src');
 const manifestPath = join(studioSrc, 'data/runware-release-manifest.json');
 
-const AIR_PATTERN = /^(runware|civitai|openai):/;
+const AIR_PATTERN = /^(runware|civitai|openai|google):/;
 const PLACEHOLDER_IDS = new Set(['runware:500@1', 'runware:600@1']);
 const RELEASE_CUTOFF = '2025-01-01';
 const MIN_COUNTS = { image: 12, video: 8, audio: 5, i2i: 15, i2v: 15, v2v: 3 };

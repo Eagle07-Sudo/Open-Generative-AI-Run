@@ -54,7 +54,7 @@ const _all = [
     name: 'Nano Banana 2 Edit',
     runwareModel: 'google:4@3',
     muapiId: 'nano-banana-2-edit',
-    ...rwReleaseMeta('nano-banana-2', '2025-08-15'),
+    ...rwReleaseMeta('nano-banana-2', '2026-02-26'),
     inputs: {
       prompt: RUNWARE_PROMPT_INPUT,
       aspect_ratio: NANO_BANANA_2_EDIT_ASPECT_INPUT,

@@ -1,5 +1,5 @@
 ---
-description: Fork policy — upstream merge, file ownership, Muapi default
+description: Fork policy — upstream merge, upstream-wins-when-better, Muapi default
 alwaysApply: true
 ---
 
@@ -7,24 +7,56 @@ alwaysApply: true
 
 **Upstream:** https://github.com/Anil-matcha/Open-Generative-AI (branch `main`)
 **This fork:** Runware + UI tweaks. **Default cloud provider:** Muapi (never remove).
+**Sync runbook:** [`docs/UPSTREAM-SYNC.md`](../../docs/UPSTREAM-SYNC.md)
+
+## Sync policy (user priority)
+
+When upstream and the fork both changed the **same area**: adopt **upstream** if their feature or fix is **better**. Drop or rework fork code in that spot. Re-wire fork-only layers (Runware, routing, dual-provider entry) after accepting upstream studio/catalog changes.
+
+**Decision order:** (1) upstream better → theirs + re-wire hooks; (2) fork-only → ours; (3) unclear → smoke test, document in `FORK.md`.
 
 ## Before every change
 
-1. Is this **fork-only**? Put it in dedicated paths (see ownership table), not scattered edits.
+1. Is this **fork-only**? Put it in dedicated paths (see Tier 1), not scattered edits.
 2. Does it touch **high-churn upstream files** (`models.js`, `muapi.js`, `*Studio.jsx`)? Minimize diff; use abstractions.
 3. Can you **add** without deleting Muapi behavior? Prefer additive changes.
 
-## Merge conflict ownership
+## Merge conflict tiers
 
-| Prefer **ours** (fork) | Prefer **theirs** (upstream) |
-|------------------------|------------------------------|
-| `packages/studio/src/providers/**` | `packages/studio/src/models.js` (unless Runware lives in `models.runware.js`) |
-| `packages/studio/src/providerFactory.js` | `packages/studio/src/muapi.js` if unchanged by design |
-| `.cursor/rules/**`, `FORK.md` | New upstream studio features — merge then re-wire provider |
-| `app/api/runware/**` (when added) | Submodule pointers as upstream ships them |
-| Fork UI/i18n under `src/lib/i18n.js`, `src/styles/**` | `app/api/api/v1/**` Muapi proxy |
+### Tier 1 — Protected (fork-only)
 
-Resolve **per file**. Sometimes choose upstream over fork — that is OK; document in `FORK.md`.
+Keep **ours** unless upstream ships the same capability and theirs is better.
+
+| Paths |
+|-------|
+| `packages/studio/src/providers/**`, `models.runware*.js`, `providerFactory.js`, `modelRegistry.js` |
+| `studioCloud.js`, `studioGenerate.js`, `useStudioCloud.js`, `cloudRoutingStore.js`, `cloudKeyStore.js`, `cloudSession.js` |
+| `app/api/runware/**` |
+| `StandaloneShell.js`, `ApiKeyModal.js`, cloud key/settings UI |
+| `.cursor/rules/**`, `FORK.md`, `SECURITY.md`, `SUPPORT.md`, README fork block |
+| parity fixtures, fork-only tests/scripts |
+
+### Tier 2 — Prefer upstream
+
+Take **theirs** first; keep fork diff only if smoke test proves fork is better.
+
+| Paths |
+|-------|
+| `packages/studio/src/models.js` (Runware stays in `models.runware.*`) |
+| `packages/studio/src/muapi.js`, `app/api/api/v1/**`, `app/api/agents/**` |
+| submodule pointers, `electron/lib/localInference*` |
+| new upstream-only studio features |
+
+### Tier 3 — Overlap (upstream wins if better)
+
+| Paths | Rule |
+|-------|------|
+| `*Studio.jsx` | Start from upstream; port Runware hooks, mentions, Recreate, cost as needed |
+| theme / i18n / `src/styles/**` | Prefer upstream UI if better; re-apply fork tokens where needed |
+| `README.md` | Upstream body + re-apply fork block |
+| `packages/studio/src/index.js` | Upstream exports + fork exports |
+
+Resolve **per file**. Document in `FORK.md` **Merge decisions**.
 
 ## Forbidden
 
@@ -40,9 +72,10 @@ Resolve **per file**. Sometimes choose upstream over fork — that is OK; docume
 
 1. `git submodule update --init --recursive`
 2. `npm run setup` if workspaces or lockfile changed
-3. Smoke test: Muapi image gen; Runware if implemented
-4. Update `FORK.md` **Upstream baseline** (SHA, date, merge notes) and **rewrite Differences from upstream** if capabilities changed; update **Merge decisions** table as needed
-5. If `README.md` conflicted: re-apply the **This fork** comparison table (after the Gemini Omni quote, before `### Related projects`); sync from FORK **Differences**; do not rewrite upstream body below
+3. `npm run check:full-parity`
+4. Smoke: Muapi image gen; Runware routing; Agents Muapi-locked
+5. Update `FORK.md` **Upstream baseline**, **Last upstream merge**, **Merge decisions**; sync README fork block if README conflicted
+6. See [`docs/UPSTREAM-SYNC.md`](../../docs/UPSTREAM-SYNC.md) for full checklist
 
 ## Diff discipline
 
@@ -54,4 +87,3 @@ Follow [`.cursor/rules/git-secrets-and-push.mdc`](git-secrets-and-push.mdc). The
 
 - **Conventional Commits** for subjects; update [`FORK.md`](../../FORK.md) **Differences from upstream** and README **This fork** table only when user-visible behavior changes.
 - Run gitleaks before commit and push (`security:secrets` / `security:secrets:git`).
-- History: `git log`. Optional `CHANGELOG.md` only when tagging a release (`v*`).

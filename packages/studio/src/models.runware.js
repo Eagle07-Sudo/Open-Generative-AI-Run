@@ -128,7 +128,7 @@ const _all = [
       aspect_ratio: RUNWARE_NANO_BANANA_2_ASPECT_INPUT,
       resolution: RUNWARE_TIER_RESOLUTION_INPUT,
     },
-    ...rwReleaseMeta('nano-banana-2', '2025-08-15'),
+    ...rwReleaseMeta('nano-banana-2', '2026-02-26'),
   }),
   rwImageEntry({
     id: 'rw-kling-image-o3',

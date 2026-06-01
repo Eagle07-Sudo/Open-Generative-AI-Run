@@ -52,6 +52,10 @@ Snapshot of how this repository differs from upstream **today**. Development his
 
 ## Maintainer notes
 
+### Upstream sync
+
+Runbook: [docs/UPSTREAM-SYNC.md](docs/UPSTREAM-SYNC.md). **Policy:** upstream wins when better on overlapping changes; Tier 1 fork-only paths (Runware, routing, personal docs) stay protected.
+
 ### Remotes
 
 ```bash
@@ -118,7 +122,7 @@ No per-commit changelog in this repo. Use `git log` for history. If you tag a re
 
 - **Date:** 2026-06-01
 - **Upstream ref:** `924f6d0` @ `Anil-matcha/Open-Generative-AI` `main`
-- **Notes:** Clean merge from `0bc9744`. Upstream: local-ai startup progress heartbeat, LipSync model reset on mode toggle, Hunyuan/Wan aspect-ratio catalog fixes, Suno audio endpoint fix. Fork Runware/routing/studio layers unchanged.
+- **Notes:** Clean merge from `0bc9744`. Upstream: local-ai startup progress heartbeat, LipSync model reset on mode toggle, Hunyuan/Wan aspect-ratio catalog fixes, Suno audio endpoint fix. Fork Runware/routing/studio layers unchanged. Verified 2026-06-01: `git log HEAD..upstream/main` empty — no further merge required until upstream advances.
 
 ### Merge decisions (conflicts)
 
@@ -126,6 +130,4 @@ No per-commit changelog in this repo. Use `git log` for history. If you tag a re
 |------|--------|--------|
 | `packages/studio/src/models.js` | auto-merge | upstream catalog fixes; fork overlay in `models.runware.*` |
 | `packages/studio/src/muapi.js` | auto-merge | upstream Suno endpoint fix |
-| `packages/studio/src/components/LipSyncStudio.jsx` | auto-merge | upstream mode toggle + fork routing props |
-| `packages/studio/src/components/AudioStudio.jsx` | auto-merge | upstream + fork |
-| `packages/studio/src/providers/**` | ours | Runware fork |
+| `packages/studio/src/providers/**` | ours | Runware fork (Tier 1) |
