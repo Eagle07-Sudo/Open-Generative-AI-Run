@@ -84,7 +84,7 @@ describe('cardMentionAssets', () => {
 
   it('stripMentionsFromPrompt removes all mention tags', () => {
     assert.equal(stripMentionsFromPrompt('@image1 make night'), 'make night');
-    assert.equal(stripMentionsFromPrompt('@image1 اجعلها ليلا'), 'اجعلها ليلا');
+    assert.equal(stripMentionsFromPrompt('@image1 turn the scene to night'), 'turn the scene to night');
     assert.equal(stripMentionsFromPrompt('  @video2  @audio1  hi  '), 'hi');
   });
 
