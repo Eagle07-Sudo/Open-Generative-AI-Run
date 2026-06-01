@@ -1183,11 +1183,12 @@ export function ImageStudio() {
             progressWrap.classList.remove('hidden');
             progressWrap.classList.add('flex');
 
-            const unsub = localAI.onProgress(({ progress, status }) => {
+            const unsub = localAI.onProgress(({ progress, status, message }) => {
                 const pct = Math.round((progress ?? 0) * 100);
+                const label = message || (status === 'starting' ? 'Starting...' : `${pct}%`);
                 if (progressFill) progressFill.style.width = `${pct}%`;
-                if (progressPct) progressPct.textContent = status === 'starting' ? 'Starting...' : `${pct}%`;
-                generateBtn.innerHTML = `<span class="animate-spin inline-block mr-2 text-black">◌</span> ${status === 'starting' ? '...' : pct + '%'}`;
+                if (progressPct) progressPct.textContent = label;
+                generateBtn.innerHTML = `<span class="animate-spin inline-block mr-2 text-black">◌</span> ${label}`;
             });
 
             let hadError = false;

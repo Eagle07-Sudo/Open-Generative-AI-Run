@@ -28,6 +28,16 @@ function resolveGuidanceScale(params, model) {
     return 7.5;
 }
 
+function formatStartupProgressMessage(elapsedMs) {
+    const seconds = Math.max(0, Math.floor((Number(elapsedMs) || 0) / 1000));
+    if (seconds < 10) return 'Starting local model...';
+    if (seconds < 60) return `Loading local model (${seconds}s)...`;
+
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `Loading local model (${minutes}m ${remainingSeconds}s)...`;
+}
+
 function stripAnsiSequences(text) {
     return text.replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, '');
 }
@@ -86,6 +96,7 @@ function parseGenerationProgressChunk(chunk, state = { tail: '', lastStep: 0, la
 module.exports = {
     coerceFiniteNumber,
     extractProgressEvents,
+    formatStartupProgressMessage,
     parseGenerationProgressChunk,
     resolveGenerationSteps,
     resolveGuidanceScale,

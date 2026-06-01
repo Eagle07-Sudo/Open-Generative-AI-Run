@@ -9,6 +9,7 @@ const {
     pickBinaryAssetForPlatform,
 } = require('./localInferenceAssets');
 const {
+    formatStartupProgressMessage,
     parseGenerationProgressChunk,
     resolveGenerationSteps,
     resolveGuidanceScale,
@@ -481,7 +482,30 @@ async function generate(params, mainWindow) {
     }
 
     return new Promise((resolve, reject) => {
-        send({ step: 0, totalSteps: steps, status: 'starting', progress: 0 });
+        const startupStartedAt = Date.now();
+        let startupHeartbeat = null;
+        let samplingStarted = false;
+
+        const sendStartupProgress = () => {
+            send({
+                step: 0,
+                totalSteps: steps,
+                status: 'starting',
+                progress: 0,
+                message: formatStartupProgressMessage(Date.now() - startupStartedAt),
+            });
+        };
+        const stopStartupHeartbeat = () => {
+            if (startupHeartbeat) {
+                clearInterval(startupHeartbeat);
+                startupHeartbeat = null;
+            }
+        };
+
+        sendStartupProgress();
+        startupHeartbeat = setInterval(() => {
+            if (!samplingStarted) sendStartupProgress();
+        }, 5000);
 
         console.log('[sd-cli] command:', BINARY_PATH, args.join(' '));
         // DYLD_LIBRARY_PATH lets macOS find libstable-diffusion.dylib next to sd-cli
@@ -495,6 +519,8 @@ async function generate(params, mainWindow) {
             outputLines.push(line.trimEnd());
             const progressEvents = parseGenerationProgressChunk(line, progressState);
             for (const event of progressEvents) {
+                samplingStarted = true;
+                stopStartupHeartbeat();
                 send({ ...event, status: 'generating' });
             }
         };
@@ -503,6 +529,7 @@ async function generate(params, mainWindow) {
         activeProcess.stderr.on('data', handleOutput);
 
         activeProcess.on('close', (code) => {
+            stopStartupHeartbeat();
             activeProcess = null;
             const allOutput = outputLines.filter(l => l.trim()).join('\n');
             console.error('[sd-cli] full output:\n' + allOutput);
@@ -527,6 +554,7 @@ async function generate(params, mainWindow) {
         });
 
         activeProcess.on('error', (err) => {
+            stopStartupHeartbeat();
             activeProcess = null;
             reject(err);
         });

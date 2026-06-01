@@ -181,10 +181,11 @@ export async function processLipSync(apiKey, params) {
 }
 
 export async function generateAudio(apiKey, params) {
-    const modelInfo = getAudioModelById(params.model);
-    const endpoint = modelInfo?.endpoint || params.model;
+    const modelId = params._modelId || params.model;
+    const modelInfo = getAudioModelById(modelId);
+    const endpoint = modelInfo?.endpoint || modelId;
     const payload = {};
-    const skipKeys = ['model', 'onRequestId'];
+    const skipKeys = ['_modelId', 'onRequestId'];
     for (const key in params) {
         if (!skipKeys.includes(key) && params[key] !== undefined && params[key] !== null) {
             payload[key] = params[key];

@@ -1133,9 +1133,10 @@ export function VideoStudio() {
         // For local generations, surface step progress in the button label.
         let unsubscribeProgress = null;
         if (isLocal) {
-            unsubscribeProgress = localAI.onProgress(({ status, progress }) => {
+            unsubscribeProgress = localAI.onProgress(({ status, progress, message }) => {
                 const pct = typeof progress === 'number' ? Math.round(progress * 100) : null;
-                generateBtn.innerHTML = `<span class="animate-spin inline-block mr-2 text-black">◌</span> ${status || t('common.generating')}${pct != null ? ` ${pct}%` : '…'}`;
+                const label = message || `${status || t('common.generating')}${pct != null ? ` ${pct}%` : '...'}`;
+                generateBtn.innerHTML = `<span class="animate-spin inline-block mr-2 text-black">◌</span> ${label}`;
             });
         }
 

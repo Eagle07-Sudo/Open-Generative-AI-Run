@@ -4864,8 +4864,7 @@ export const i2vModels = [
         "description": "Aspect ratio of the output video.",
         "enum": [
           "16:9",
-          "9:16",
-          "1:1"
+          "9:16"
         ],
         "default": "16:9"
       },
@@ -4984,8 +4983,7 @@ export const i2vModels = [
         "description": "Aspect ratio of the output video.",
         "enum": [
           "16:9",
-          "9:16",
-          "1:1"
+          "9:16"
         ],
         "default": "16:9"
       },
@@ -5066,8 +5064,7 @@ export const i2vModels = [
         "description": "Aspect ratio of the output video.",
         "enum": [
           "16:9",
-          "9:16",
-          "1:1"
+          "9:16"
         ],
         "default": "16:9"
       },

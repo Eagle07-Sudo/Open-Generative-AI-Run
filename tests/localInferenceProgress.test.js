@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+    formatStartupProgressMessage,
     parseGenerationProgressChunk,
     resolveGenerationSteps,
     resolveGuidanceScale,
@@ -21,6 +22,12 @@ test('resolveGuidanceScale prefers explicit request over model defaults', () => 
 test('stripAnsiSequences removes terminal control codes', () => {
     const cleaned = stripAnsiSequences('\u001b[32mhello\u001b[0m');
     assert.equal(cleaned, 'hello');
+});
+
+test('formatStartupProgressMessage surfaces elapsed startup time', () => {
+    assert.equal(formatStartupProgressMessage(0), 'Starting local model...');
+    assert.equal(formatStartupProgressMessage(12_400), 'Loading local model (12s)...');
+    assert.equal(formatStartupProgressMessage(65_000), 'Loading local model (1m 5s)...');
 });
 
 test('parseGenerationProgressChunk extracts sd-cli sampling progress from carriage-return output', () => {
